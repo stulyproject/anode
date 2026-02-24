@@ -4,6 +4,5 @@ export default defineConfig({
   entry: ['./src/index.ts'],
   platform: 'browser',
   dts: true,
-  unbundle: true,
-  noExternal: ['anode']
+  unbundle: true
 });
