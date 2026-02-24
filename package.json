@@ -10,6 +10,13 @@
     "dev": "tsdown --watch",
     "format": "prettier --write ."
   },
+  "exports": {
+    ".": {
+      "types": "./dist/anode.d.ts",
+      "import": "./dist/anode.js",
+      "default": "./dist/anode.js"
+    }
+  },
   "keywords": [],
   "author": "",
   "license": "MIT",

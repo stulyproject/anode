@@ -1,0 +1,25 @@
+{
+  "name": "anode-react",
+  "version": "0.0.1",
+  "description": "Anode react wrapper",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm tsdown"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@10.30.1",
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "anode": "workspace:*",
+    "react": "^19.2.4"
+  }
+}
