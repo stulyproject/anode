@@ -1,6 +1,7 @@
 .DS_Store
 node_modules
 /dist
+/packages/**/*/dist
 /.changeset
 
 # Ignore files for PNPM, NPM and YARN
