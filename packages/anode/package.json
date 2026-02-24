@@ -5,6 +5,9 @@
   "module": "dist/anode.js",
   "types": "dist/anode.d.ts",
   "description": "A simple node library",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
