@@ -33,6 +33,7 @@ export class Socket {
   kind: SocketKind;
   name: string;
   offset: Vec2 = new Vec2();
+  value: any = null;
 
   constructor(id: number, entityId: number, kind: SocketKind, name: string = '') {
     this.#id = id;

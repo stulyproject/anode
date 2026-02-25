@@ -35,6 +35,8 @@ export const World: React.FC<{
   const { selection, setSelection } = useSelection();
   const worldRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const transformRef = useRef(transform);
+  transformRef.current = transform;
 
   // Track container size for accurate spatial culling
   useEffect(() => {
@@ -47,6 +49,36 @@ export const World: React.FC<{
     return () => observer.disconnect();
   }, []);
 
+  // Native wheel listener to allow preventDefault (fixing passive listener error)
+  useEffect(() => {
+    const el = worldRef.current;
+    if (!el) return;
+
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const t = transformRef.current;
+
+      const delta = -e.deltaY;
+      const factor = Math.pow(1.1, delta / 100);
+      const newK = Math.min(Math.max(t.k * factor, 0.1), 5);
+
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const beforeKMouseX = (mouseX - t.x) / t.k;
+      const beforeKMouseY = (mouseY - t.y) / t.k;
+
+      const newX = mouseX - beforeKMouseX * newK;
+      const newY = mouseY - beforeKMouseY * newK;
+
+      setTransform({ x: newX, y: newY, k: newK });
+    };
+
+    el.addEventListener('wheel', onWheelNative, { passive: false });
+    return () => el.removeEventListener('wheel', onWheelNative);
+  }, [setTransform]);
+
   const entities = useVisibleNodes(containerSize);
   const links = useEdges();
   const [pendingLink, setPendingLink] = useState<{
@@ -58,18 +90,33 @@ export const World: React.FC<{
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Deletion
       if (e.key === 'Backspace' || e.key === 'Delete') {
-        // Drop selected nodes
-        for (const nid of selection.nodes) {
-          const entity = ctx.entities.get(nid);
-          if (entity) ctx.dropEntity(entity);
-        }
-        // Drop selected links
-        for (const lid of selection.links) {
-          const link = ctx.links.get(lid);
-          if (link) ctx.dropLink(link);
-        }
+        // Only delete if not typing in an input
+        if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+        ctx.batch(() => {
+          for (const nid of selection.nodes) {
+            const entity = ctx.entities.get(nid);
+            if (entity) ctx.dropEntity(entity);
+          }
+          for (const lid of selection.links) {
+            const link = ctx.links.get(lid);
+            if (link) ctx.dropLink(link);
+          }
+        }, 'Delete Selection');
         setSelection({ nodes: new Set(), links: new Set() });
+      }
+
+      // Undo / Redo
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) ctx.redo();
+        else ctx.undo();
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        ctx.redo();
+        e.preventDefault();
       }
     };
 
@@ -166,27 +213,6 @@ export const World: React.FC<{
     return () => el?.removeEventListener('anode-link-start', handleLinkStart);
   }, [ctx, transform, defaultLinkKind, onConnect, isValidConnection]);
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = worldRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const delta = -e.deltaY;
-    const factor = Math.pow(1.1, delta / 100);
-    const newK = Math.min(Math.max(transform.k * factor, 0.1), 5);
-
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const beforeKMouseX = (mouseX - transform.x) / transform.k;
-    const beforeKMouseY = (mouseY - transform.y) / transform.k;
-
-    const newX = mouseX - beforeKMouseX * newK;
-    const newY = mouseY - beforeKMouseY * newK;
-
-    setTransform({ x: newX, y: newY, k: newK });
-  };
-
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
 
@@ -220,7 +246,6 @@ export const World: React.FC<{
     <div
       ref={worldRef}
       className="anode-world"
-      onWheel={onWheel}
       onMouseDown={onMouseDown}
       style={{
         position: 'relative',

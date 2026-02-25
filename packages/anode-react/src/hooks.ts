@@ -42,7 +42,7 @@ export const useVisibleNodes = (containerRect?: { width: number; height: number 
     const padding = 300 / viewport.k;
     const queryRect = new Rect(x - padding, y - padding, w + padding * 2, h + padding * 2);
 
-    const visibleIds = ctx.quadTree.query(queryRect);
+    const visibleIds = Array.from(new Set(ctx.quadTree.query(queryRect)));
     return visibleIds.map((id) => ctx.entities.get(id)).filter((n): n is Entity => !!n);
   }, [ctx, viewport, containerRect, allNodes]);
 };
@@ -72,3 +72,62 @@ export const useEdges = () => {
 
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 };
+
+export const useEntitySockets = (entityId: number) => {
+  const ctx = useAnode();
+  const store = useMemo(() => {
+    let snapshot: any[] = [];
+    const entity = ctx.entities.get(entityId);
+    if (entity) snapshot = Array.from(entity.sockets.values());
+
+    return {
+      subscribe: (onStoreChange: () => void) => {
+        const update = () => {
+          const e = ctx.entities.get(entityId);
+          snapshot = e ? Array.from(e.sockets.values()) : [];
+          onStoreChange();
+        };
+        const h1 = ctx.registerSocketCreateListener((s) => {
+          if (s.entityId === entityId) update();
+        });
+        const h2 = ctx.registerSocketDropListener((s) => {
+          if (s.entityId === entityId) update();
+        });
+        const h3 = ctx.registerSocketMoveListener((s) => {
+          if (s.entityId === entityId) update();
+        });
+        return () => {
+          ctx.unregisterListener(h1);
+          ctx.unregisterListener(h2);
+          ctx.unregisterListener(h3);
+        };
+      },
+      getSnapshot: () => snapshot
+    };
+  }, [ctx, entityId]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+};
+
+export function useSocketValue<T = any>(socketId: number | null): T {
+  const ctx = useAnode();
+  const store = useMemo(() => {
+    return {
+      subscribe: (onStoreChange: () => void) => {
+        if (socketId === null) return () => {};
+        const handle = ctx.registerSocketValueListener((s) => {
+          if (s.id === socketId) {
+            onStoreChange();
+          }
+        });
+        return () => ctx.unregisterListener(handle);
+      },
+      getSnapshot: () => {
+        if (socketId === null) return null;
+        return ctx.sockets.get(socketId)?.value ?? null;
+      }
+    };
+  }, [ctx, socketId]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+}

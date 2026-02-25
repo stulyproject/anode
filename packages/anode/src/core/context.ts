@@ -1,11 +1,13 @@
 import { Entity, Link, LinkKind, Socket, SocketKind, Vec2, Group } from './elements';
 import { QuadTree, Rect } from './layout';
+import { HistoryManager, HistoryAction, Command } from './history';
 
 export type EntityCallback<T> = (entity: Entity<T>) => void;
 export type LinkCallback = (link: Link) => void;
 export type SocketCallback = (socket: Socket) => void;
 export type EntityMoveCallback<T> = (entity: Entity<T>, pos: Vec2) => void;
 export type GroupCallback = (group: Group) => void;
+export type SocketValueCallback = (socket: Socket, value: any) => void;
 export type CallbackHandle = number;
 
 export class Context<T = any> {
@@ -26,6 +28,7 @@ export class Context<T = any> {
   private entityDropCallbacks: Map<number, EntityCallback<T>> = new Map();
   private entityMoveCallbacks: Map<number, EntityMoveCallback<T>> = new Map();
   private socketMoveCallbacks: Map<number, SocketCallback> = new Map();
+  private socketValueCallbacks: Map<number, SocketValueCallback> = new Map();
 
   private linkCreateCallbacks: Map<number, LinkCallback> = new Map();
   private linkDropCallbacks: Map<number, LinkCallback> = new Map();
@@ -42,6 +45,11 @@ export class Context<T = any> {
   groups: Map<number, Group> = new Map();
 
   quadTree: QuadTree<number> = new QuadTree(new Rect(-100000, -100000, 200000, 200000));
+  history: HistoryManager = new HistoryManager();
+  private isApplyingHistory: boolean = false;
+  private currentBatch: HistoryAction[] | null = null;
+  private currentUndoBatch: HistoryAction[] | null = null;
+  private isBatchingQuadTree: boolean = false;
 
   private getNextEid() {
     return this.freeEids.pop() ?? this.eid++;
@@ -57,6 +65,244 @@ export class Context<T = any> {
   }
   private getNextCallbackHandle(): CallbackHandle {
     return this.freeCallbackIds.pop() ?? this.callbackIds++;
+  }
+
+  setSocketValue(socketId: number, value: any) {
+    const socket = this.sockets.get(socketId);
+    if (!socket) return;
+
+    socket.value = value;
+
+    // Notify listeners for this specific socket
+    for (const cb of this.socketValueCallbacks.values()) {
+      cb(socket, value);
+    }
+
+    // If it's an OUTPUT, propagate to all linked INPUTs
+    if (socket.kind === SocketKind.OUTPUT) {
+      for (const link of this.links.values()) {
+        if (link.from === socketId) {
+          this.setSocketValue(link.to, value);
+        }
+      }
+    }
+  }
+
+  registerSocketValueListener(cb: SocketValueCallback): CallbackHandle {
+    const handle = this.getNextCallbackHandle();
+    this.socketValueCallbacks.set(handle, cb);
+    return handle;
+  }
+
+  record(
+    doActions: HistoryAction | HistoryAction[],
+    undoActions: HistoryAction | HistoryAction[],
+    label?: string
+  ) {
+    if (this.isApplyingHistory) return;
+
+    // If we are in a batch, we don't record individual actions to history
+    // We let the batch() method handle the combined history entry
+    if (this.currentBatch) {
+      return;
+    }
+
+    const das = Array.isArray(doActions) ? doActions : [doActions];
+    const uas = Array.isArray(undoActions) ? undoActions : [undoActions];
+
+    this.history.push({
+      do: das,
+      undo: uas,
+      label,
+      timestamp: Date.now()
+    });
+  }
+
+  batch(fn: () => void, label?: string) {
+    if (this.currentBatch) {
+      fn();
+      return;
+    }
+
+    const oldApplying = this.isApplyingHistory;
+    const oldBatchingQT = this.isBatchingQuadTree;
+    const beforeState = this.toJSON();
+
+    try {
+      this.isApplyingHistory = true;
+      this.isBatchingQuadTree = true;
+      fn();
+
+      this.isBatchingQuadTree = oldBatchingQT;
+      this.updateQuadTree();
+
+      const afterState = this.toJSON();
+
+      this.history.push({
+        do: [{ type: 'FROM_JSON', data: afterState } as any],
+        undo: [{ type: 'FROM_JSON', data: beforeState } as any],
+        label,
+        timestamp: Date.now()
+      });
+    } finally {
+      this.isApplyingHistory = oldApplying;
+      this.isBatchingQuadTree = oldBatchingQT;
+    }
+  }
+  undo() {
+    const cmd = this.history.undoStack.pop();
+    if (!cmd) return;
+    this.isApplyingHistory = true;
+    try {
+      for (let i = cmd.undo.length - 1; i >= 0; i--) {
+        this.applyAction(cmd.undo[i]);
+      }
+      this.history.redoStack.push(cmd);
+    } finally {
+      this.isApplyingHistory = false;
+    }
+  }
+
+  redo() {
+    const cmd = this.history.redoStack.pop();
+    if (!cmd) return;
+    this.isApplyingHistory = true;
+    try {
+      for (const action of cmd.do) {
+        this.applyAction(action);
+      }
+      this.history.undoStack.push(cmd);
+    } finally {
+      this.isApplyingHistory = false;
+    }
+  }
+
+  private applyAction(action: HistoryAction) {
+    switch (action.type as any) {
+      case 'FROM_JSON': {
+        this.fromJSON((action as any).data);
+        break;
+      }
+      case 'MOVE_ENTITY': {
+        const entity = this.entities.get(action.id);
+        if (entity) {
+          entity.position.set(action.to.x, action.to.y);
+          for (const cb of this.entityMoveCallbacks.values())
+            cb(entity, this.getWorldPosition(entity.id));
+          this.updateQuadTree();
+        }
+        break;
+      }
+      case 'MOVE_GROUP': {
+        const group = this.groups.get(action.id);
+        if (group) {
+          const dx = action.to.x - action.from.x;
+          const dy = action.to.y - action.from.y;
+          const oldApplying = this.isApplyingHistory;
+          this.isApplyingHistory = true;
+          try {
+            this.moveGroup(group, dx, dy);
+          } finally {
+            this.isApplyingHistory = oldApplying;
+          }
+        }
+        break;
+      }
+      case 'CREATE_ENTITY': {
+        const entity = new Entity(action.id, action.inner);
+        entity.position.set(action.position.x, action.position.y);
+        this.entities.set(entity.id, entity);
+        this.eid = Math.max(this.eid, entity.id + 1);
+
+        entity.onMove((pos) => {
+          this.updateQuadTree();
+          for (const cb of this.entityMoveCallbacks.values()) {
+            try {
+              cb(entity, this.getWorldPosition(entity.id));
+            } catch (err) {
+              console.error(err);
+            }
+          }
+        });
+
+        if (action.parentId !== null) {
+          this.addToGroup(action.parentId, entity.id);
+        }
+        for (const cb of this.entityCreateCallbacks.values()) cb(entity);
+        this.updateQuadTree();
+        break;
+      }
+      case 'DROP_ENTITY': {
+        const entity = this.entities.get(action.id);
+        if (entity) {
+          const oldApplying = this.isApplyingHistory;
+          this.isApplyingHistory = true;
+          try {
+            this.dropEntity(entity);
+          } finally {
+            this.isApplyingHistory = oldApplying;
+          }
+        }
+        break;
+      }
+      case 'CREATE_LINK': {
+        const from = this.sockets.get(action.from);
+        const to = this.sockets.get(action.to);
+        if (from && to) {
+          const link = new Link(action.id, from.id, to.id, action.kind);
+          this.links.set(link.id, link);
+          this.lid = Math.max(this.lid, link.id + 1);
+          for (const cb of this.linkCreateCallbacks.values()) cb(link);
+        }
+        break;
+      }
+      case 'DROP_LINK': {
+        const link = this.links.get(action.id);
+        if (link) {
+          const oldApplying = this.isApplyingHistory;
+          this.isApplyingHistory = true;
+          try {
+            this.dropLink(link);
+          } finally {
+            this.isApplyingHistory = oldApplying;
+          }
+        }
+        break;
+      }
+      case 'ADD_TO_GROUP': {
+        this.addToGroup(action.groupId, action.entityId);
+        break;
+      }
+      case 'REMOVE_FROM_GROUP': {
+        this.removeFromGroup(action.groupId, action.entityId);
+        break;
+      }
+      case 'CREATE_SOCKET': {
+        const entity = this.entities.get(action.entityId);
+        if (entity) {
+          const socket = new Socket(action.id, entity.id, action.kind, action.name);
+          socket.offset.set(action.offset.x, action.offset.y);
+          this.sockets.set(socket.id, socket);
+          entity.sockets.set(socket.id, socket);
+          this.sid = Math.max(this.sid, socket.id + 1);
+          for (const cb of this.socketCreateCallbacks.values()) cb(socket);
+        }
+        break;
+      }
+      case 'DROP_SOCKET': {
+        const socket = this.sockets.get(action.id);
+        if (socket) {
+          const oldApplying = this.isApplyingHistory;
+          this.isApplyingHistory = true;
+          try {
+            this.dropSocket(socket);
+          } finally {
+            this.isApplyingHistory = oldApplying;
+          }
+        }
+        break;
+      }
+    }
   }
 
   registerEntityCreateListener(cb: EntityCallback<T>): CallbackHandle {
@@ -227,9 +473,11 @@ export class Context<T = any> {
   }
 
   moveGroup(group: Group, dx: number, dy: number) {
+    const oldBatching = this.isBatchingQuadTree;
+    this.isBatchingQuadTree = true;
+
     group.position.x += dx;
     group.position.y += dy;
-    this.updateQuadTree();
 
     // Notify about moves for all nested entities recursively
     const notifyRecursive = (g: Group) => {
@@ -246,7 +494,13 @@ export class Context<T = any> {
         if (childGroup) notifyRecursive(childGroup);
       }
     };
-    notifyRecursive(group);
+
+    try {
+      notifyRecursive(group);
+    } finally {
+      this.isBatchingQuadTree = oldBatching;
+      this.updateQuadTree();
+    }
   }
 
   addToGroup(groupId: number, entityId: number) {
@@ -297,9 +551,21 @@ export class Context<T = any> {
   }
 
   updateQuadTree() {
+    if (this.isBatchingQuadTree) return;
+
     this.quadTree.clear();
     for (const entity of this.entities.values()) {
-      this.quadTree.insert(this.getWorldPosition(entity.id), entity.id);
+      const entityWorldPos = this.getWorldPosition(entity.id);
+      // Index entity top-left
+      this.quadTree.insert(entityWorldPos, entity.id);
+
+      // Index every socket world position
+      for (const socket of entity.sockets.values()) {
+        this.quadTree.insert(
+          new Vec2(entityWorldPos.x + socket.offset.x, entityWorldPos.y + socket.offset.y),
+          entity.id
+        );
+      }
     }
   }
 
@@ -319,6 +585,26 @@ export class Context<T = any> {
       }
     });
 
+    if (!this.isApplyingHistory) {
+      this.record(
+        {
+          type: 'CREATE_ENTITY',
+          id: ett.id,
+          inner: ett.inner,
+          position: { ...ett.position },
+          parentId: ett.parentId
+        },
+        {
+          type: 'DROP_ENTITY',
+          id: ett.id,
+          inner: ett.inner,
+          position: { ...ett.position },
+          parentId: ett.parentId
+        },
+        'Create Entity'
+      );
+    }
+
     for (const cb of this.entityCreateCallbacks.values()) {
       try {
         cb(ett);
@@ -332,26 +618,47 @@ export class Context<T = any> {
 
   dropEntity(entity: Entity<T>) {
     if (this.entities.has(entity.id)) {
-      if (entity.parentId !== null) {
-        this.removeFromGroup(entity.parentId, entity.id);
-      }
+      this.batch(() => {
+        // Record entity drop itself
+        this.record(
+          {
+            type: 'DROP_ENTITY',
+            id: entity.id,
+            inner: entity.inner,
+            position: { ...entity.position },
+            parentId: entity.parentId
+          },
+          {
+            type: 'CREATE_ENTITY',
+            id: entity.id,
+            inner: entity.inner,
+            position: { ...entity.position },
+            parentId: entity.parentId
+          },
+          'Drop Entity'
+        );
 
-      this.entities.delete(entity.id);
-
-      // Drop all sockets of this entity
-      for (const socket of entity.sockets.values()) {
-        this.dropSocket(socket);
-      }
-
-      this.freeEids.push(entity.id);
-      for (const cb of this.entityDropCallbacks.values()) {
-        try {
-          cb(entity);
-        } catch (err) {
-          console.error(err);
+        if (entity.parentId !== null) {
+          this.removeFromGroup(entity.parentId, entity.id);
         }
-      }
-      this.updateQuadTree();
+
+        this.entities.delete(entity.id);
+
+        // Drop all sockets of this entity
+        for (const socket of entity.sockets.values()) {
+          this.dropSocket(socket);
+        }
+
+        this.freeEids.push(entity.id);
+        for (const cb of this.entityDropCallbacks.values()) {
+          try {
+            cb(entity);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+        this.updateQuadTree();
+      }, 'Drop Entity');
     }
   }
 
@@ -359,6 +666,28 @@ export class Context<T = any> {
     const socket = new Socket(this.getNextSid(), entity.id, kind, name);
     this.sockets.set(socket.id, socket);
     entity.sockets.set(socket.id, socket);
+
+    if (!this.isApplyingHistory) {
+      this.record(
+        {
+          type: 'CREATE_SOCKET',
+          id: socket.id,
+          entityId: entity.id,
+          kind,
+          name,
+          offset: { ...socket.offset }
+        },
+        {
+          type: 'DROP_SOCKET',
+          id: socket.id,
+          entityId: entity.id,
+          kind,
+          name,
+          offset: { ...socket.offset }
+        },
+        'Create Socket'
+      );
+    }
 
     for (const cb of this.socketCreateCallbacks.values()) {
       try {
@@ -372,6 +701,27 @@ export class Context<T = any> {
 
   dropSocket(socket: Socket) {
     if (this.sockets.delete(socket.id)) {
+      if (!this.isApplyingHistory) {
+        this.record(
+          {
+            type: 'DROP_SOCKET',
+            id: socket.id,
+            entityId: socket.entityId,
+            kind: socket.kind,
+            name: socket.name,
+            offset: { ...socket.offset }
+          },
+          {
+            type: 'CREATE_SOCKET',
+            id: socket.id,
+            entityId: socket.entityId,
+            kind: socket.kind,
+            name: socket.name,
+            offset: { ...socket.offset }
+          },
+          'Drop Socket'
+        );
+      }
       const entity = this.entities.get(socket.entityId);
       if (entity) {
         entity.sockets.delete(socket.id);
@@ -401,6 +751,19 @@ export class Context<T = any> {
     }
     const link = new Link(this.getNextLid(), from.id, to.id, kind);
     this.links.set(link.id, link);
+
+    if (!this.isApplyingHistory) {
+      this.record(
+        { type: 'CREATE_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
+        { type: 'DROP_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
+        'Create Link'
+      );
+    }
+
+    // Immediate propagation: If the source has a value, push it to the target
+    if (from.value !== null) {
+      this.setSocketValue(to.id, from.value);
+    }
 
     for (const cb of this.linkCreateCallbacks.values()) {
       try {
@@ -466,6 +829,13 @@ export class Context<T = any> {
 
   dropLink(link: Link) {
     if (this.links.delete(link.id)) {
+      if (!this.isApplyingHistory) {
+        this.record(
+          { type: 'DROP_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
+          { type: 'CREATE_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
+          'Drop Link'
+        );
+      }
       this.freeLids.push(link.id);
       for (const cb of this.linkDropCallbacks.values()) {
         try {

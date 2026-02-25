@@ -6,7 +6,7 @@
 - [x] **Grouping Enhancements**: Nested groups and group-level move listeners.
 - [ ] **Performance**: Optimize `toJSON`/`fromJSON` for large graphs.
 - [x] **Validation**: Add link validation rules (e.g., prevent cycles).
-- [ ] **Undo / Redo History**: Command pattern for all graph modifications.
+- [x] **Undo / Redo History**: Command pattern for all graph modifications.
 - [ ] **Auto-Layout**: Tree and Grid layout algorithms (Dagre-like).
 
 ## React Wrapper (anode-react)

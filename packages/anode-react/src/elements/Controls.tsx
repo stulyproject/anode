@@ -70,7 +70,7 @@ export const Controls: React.FC<{
         -
       </button>
       <button onClick={onFitView} style={buttonStyle}>
-        T
+        w
       </button>
     </div>
   );

@@ -7,4 +7,4 @@ export { MiniMap } from './elements/MiniMap.js';
 export { Controls } from './elements/Controls.js';
 export { Panel } from './elements/Panel.js';
 export { AnodeProvider, useAnode, useViewport, useSelection } from './context.js';
-export { useNodes, useEdges, useVisibleNodes } from './hooks.js';
+export { useNodes, useEdges, useVisibleNodes, useSocketValue, useEntitySockets } from './hooks.js';
