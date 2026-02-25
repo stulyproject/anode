@@ -1,4 +1,5 @@
 import React from 'react';
+import { useViewport } from '../context.js';
 
 export interface BackgroundProps {
   color?: string;
@@ -13,6 +14,16 @@ export const Background: React.FC<BackgroundProps> = ({
   gap = 20,
   pattern = 'dots'
 }) => {
+  const { viewport } = useViewport();
+
+  // Scale the gap and size by the current zoom level (k)
+  const scaledGap = gap * viewport.k;
+  const scaledSize = size * viewport.k;
+
+  // Offset the background so it pans with the world
+  const offsetX = viewport.x % scaledGap;
+  const offsetY = viewport.y % scaledGap;
+
   return (
     <div
       style={{
@@ -25,9 +36,10 @@ export const Background: React.FC<BackgroundProps> = ({
         zIndex: 0,
         backgroundImage:
           pattern === 'dots'
-            ? `radial-gradient(${color} ${size}px, transparent 0)`
-            : `linear-gradient(to right, ${color} 1px, transparent 1px), linear-gradient(to bottom, ${color} 1px, transparent 1px)`,
-        backgroundSize: `${gap}px ${gap}px`
+            ? `radial-gradient(${color} ${scaledSize}px, transparent 0)`
+            : `linear-gradient(to right, ${color} ${Math.max(1, viewport.k)}px, transparent 1px), linear-gradient(to bottom, ${color} ${Math.max(1, viewport.k)}px, transparent 1px)`,
+        backgroundSize: `${scaledGap}px ${scaledGap}px`,
+        backgroundPosition: `${offsetX}px ${offsetY}px`
       }}
     />
   );

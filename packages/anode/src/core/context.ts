@@ -1,4 +1,5 @@
 import { Entity, Link, LinkKind, Socket, SocketKind, Vec2, Group } from './elements';
+import { QuadTree, Rect } from './layout';
 
 export type EntityCallback<T> = (entity: Entity<T>) => void;
 export type LinkCallback = (link: Link) => void;
@@ -24,6 +25,7 @@ export class Context<T = any> {
   private entityCreateCallbacks: Map<number, EntityCallback<T>> = new Map();
   private entityDropCallbacks: Map<number, EntityCallback<T>> = new Map();
   private entityMoveCallbacks: Map<number, EntityMoveCallback<T>> = new Map();
+  private socketMoveCallbacks: Map<number, SocketCallback> = new Map();
 
   private linkCreateCallbacks: Map<number, LinkCallback> = new Map();
   private linkDropCallbacks: Map<number, LinkCallback> = new Map();
@@ -38,6 +40,8 @@ export class Context<T = any> {
   links: Map<number, Link> = new Map();
   sockets: Map<number, Socket> = new Map();
   groups: Map<number, Group> = new Map();
+
+  quadTree: QuadTree<number> = new QuadTree(new Rect(-100000, -100000, 200000, 200000));
 
   private getNextEid() {
     return this.freeEids.pop() ?? this.eid++;
@@ -71,6 +75,22 @@ export class Context<T = any> {
     const handle = this.getNextCallbackHandle();
     this.entityMoveCallbacks.set(handle, cb);
     return handle;
+  }
+
+  registerSocketMoveListener(cb: SocketCallback): CallbackHandle {
+    const handle = this.getNextCallbackHandle();
+    this.socketMoveCallbacks.set(handle, cb);
+    return handle;
+  }
+
+  notifySocketMove(socket: Socket) {
+    for (const cb of this.socketMoveCallbacks.values()) {
+      try {
+        cb(socket);
+      } catch (err) {
+        console.error(err);
+      }
+    }
   }
 
   registerLinkCreateListener(cb: LinkCallback): CallbackHandle {
@@ -118,6 +138,7 @@ export class Context<T = any> {
       this.entityMoveCallbacks.delete(handle) ||
       this.socketCreateCallbacks.delete(handle) ||
       this.socketDropCallbacks.delete(handle) ||
+      this.socketMoveCallbacks.delete(handle) ||
       this.groupCreateCallbacks.delete(handle) ||
       this.groupDropCallbacks.delete(handle);
 
@@ -143,6 +164,20 @@ export class Context<T = any> {
 
   dropGroup(group: Group) {
     if (this.groups.delete(group.id)) {
+      if (group.parentId !== null) {
+        this.removeGroupFromGroup(group.parentId, group.id);
+      }
+      // Detach all entities
+      for (const eid of group.entities) {
+        const entity = this.entities.get(eid);
+        if (entity) entity.parentId = null;
+      }
+      // Detach all nested groups
+      for (const gid of group.groups) {
+        const childGroup = this.groups.get(gid);
+        if (childGroup) childGroup.parentId = null;
+      }
+
       this.freeGids.push(group.id);
       for (const cb of this.groupDropCallbacks.values()) {
         try {
@@ -151,17 +186,120 @@ export class Context<T = any> {
           console.error(err);
         }
       }
+      this.updateQuadTree();
     }
+  }
+
+  getWorldPosition(entityId: number): Vec2 {
+    const entity = this.entities.get(entityId);
+    if (!entity) return new Vec2();
+
+    const pos = entity.position.clone();
+    let currentParentId = entity.parentId;
+
+    while (currentParentId !== null) {
+      const parent = this.groups.get(currentParentId);
+      if (!parent) break;
+      pos.x += parent.position.x;
+      pos.y += parent.position.y;
+      currentParentId = parent.parentId;
+    }
+
+    return pos;
+  }
+
+  getGroupWorldPosition(groupId: number): Vec2 {
+    const group = this.groups.get(groupId);
+    if (!group) return new Vec2();
+
+    const pos = group.position.clone();
+    let currentParentId = group.parentId;
+
+    while (currentParentId !== null) {
+      const parent = this.groups.get(currentParentId);
+      if (!parent) break;
+      pos.x += parent.position.x;
+      pos.y += parent.position.y;
+      currentParentId = parent.parentId;
+    }
+
+    return pos;
   }
 
   moveGroup(group: Group, dx: number, dy: number) {
     group.position.x += dx;
     group.position.y += dy;
-    for (const eid of group.entities) {
-      const entity = this.entities.get(eid);
-      if (entity) {
-        entity.move(entity.position.x + dx, entity.position.y + dy);
+    this.updateQuadTree();
+
+    // Notify about moves for all nested entities recursively
+    const notifyRecursive = (g: Group) => {
+      for (const eid of g.entities) {
+        const entity = this.entities.get(eid);
+        if (entity) {
+          for (const cb of this.entityMoveCallbacks.values()) {
+            cb(entity, this.getWorldPosition(eid));
+          }
+        }
       }
+      for (const gid of g.groups) {
+        const childGroup = this.groups.get(gid);
+        if (childGroup) notifyRecursive(childGroup);
+      }
+    };
+    notifyRecursive(group);
+  }
+
+  addToGroup(groupId: number, entityId: number) {
+    const group = this.groups.get(groupId);
+    const entity = this.entities.get(entityId);
+    if (group && entity) {
+      // If already in a group, remove it
+      if (entity.parentId !== null) {
+        this.removeFromGroup(entity.parentId, entityId);
+      }
+      group.add(entityId);
+      entity.parentId = groupId;
+      this.updateQuadTree();
+    }
+  }
+
+  removeFromGroup(groupId: number, entityId: number) {
+    const group = this.groups.get(groupId);
+    const entity = this.entities.get(entityId);
+    if (group && entity) {
+      group.remove(entityId);
+      entity.parentId = null;
+      this.updateQuadTree();
+    }
+  }
+
+  addGroupToGroup(parentGroupId: number, childGroupId: number) {
+    const parent = this.groups.get(parentGroupId);
+    const child = this.groups.get(childGroupId);
+    if (parent && child && parentGroupId !== childGroupId) {
+      if (child.parentId !== null) {
+        this.removeGroupFromGroup(child.parentId, childGroupId);
+      }
+      parent.addGroup(childGroupId);
+      child.parentId = parentGroupId;
+      this.updateQuadTree();
+    }
+  }
+
+  removeGroupFromGroup(parentGroupId: number, childGroupId: number) {
+    const parent = this.groups.get(parentGroupId);
+    const child = this.groups.get(childGroupId);
+    if (parent && child) {
+      parent.removeGroup(childGroupId);
+      child.parentId = null;
+      this.updateQuadTree();
+    }
+  }
+
+  updateQuadTree() {
+    this.quadTree.clear();
+    for (const entity of this.entities.values()) {
+      this.quadTree.insert(this.getWorldPosition(entity.id), entity.id);
     }
   }
 
@@ -171,9 +309,10 @@ export class Context<T = any> {
 
     // Register move listener automatically to bridge to context listeners
     ett.onMove((pos) => {
+      this.updateQuadTree();
       for (const cb of this.entityMoveCallbacks.values()) {
         try {
-          cb(ett, pos);
+          cb(ett, this.getWorldPosition(ett.id));
         } catch (err) {
           console.error(err);
         }
@@ -187,11 +326,18 @@ export class Context<T = any> {
         console.error(err);
       }
     }
+    this.updateQuadTree();
     return ett;
   }
 
   dropEntity(entity: Entity<T>) {
-    if (this.entities.delete(entity.id)) {
+    if (this.entities.has(entity.id)) {
+      if (entity.parentId !== null) {
+        this.removeFromGroup(entity.parentId, entity.id);
+      }
+
+      this.entities.delete(entity.id);
+
       // Drop all sockets of this entity
       for (const socket of entity.sockets.values()) {
         this.dropSocket(socket);
@@ -205,6 +351,7 @@ export class Context<T = any> {
           console.error(err);
         }
       }
+      this.updateQuadTree();
     }
   }
 
@@ -278,7 +425,43 @@ export class Context<T = any> {
         return false;
       }
     }
+
+    if (this.detectCycle(from, to)) {
+      return false;
+    }
+
     return true;
+  }
+
+  detectCycle(from: Socket, to: Socket): boolean {
+    const visited = new Set<number>();
+    const stack = [to.entityId];
+
+    while (stack.length > 0) {
+      const currentEntityId = stack.pop()!;
+      if (currentEntityId === from.entityId) return true;
+      if (visited.has(currentEntityId)) continue;
+      visited.add(currentEntityId);
+
+      // Find all outgoing links from this entity
+      const entity = this.entities.get(currentEntityId);
+      if (!entity) continue;
+
+      for (const socket of entity.sockets.values()) {
+        if (socket.kind === SocketKind.OUTPUT) {
+          for (const link of this.links.values()) {
+            if (link.from === socket.id) {
+              const targetSocket = this.sockets.get(link.to);
+              if (targetSocket) {
+                stack.push(targetSocket.entityId);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return false;
   }
 
   dropLink(link: Link) {
@@ -300,6 +483,7 @@ export class Context<T = any> {
         id: e.id,
         position: { x: e.position.x, y: e.position.y },
         inner: e.inner,
+        parentId: e.parentId,
         sockets: Array.from(e.sockets.values()).map((s) => ({
           id: s.id,
           kind: s.kind,
@@ -317,7 +501,9 @@ export class Context<T = any> {
         id: g.id,
         name: g.name,
         entities: Array.from(g.entities),
-        position: { x: g.position.x, y: g.position.y }
+        groups: Array.from(g.groups),
+        position: { x: g.position.x, y: g.position.y },
+        parentId: g.parentId
       }))
     };
   }
@@ -339,6 +525,7 @@ export class Context<T = any> {
     for (const eData of data.entities) {
       const entity = new Entity(eData.id, eData.inner);
       entity.position.set(eData.position.x, eData.position.y);
+      entity.parentId = eData.parentId;
       this.entities.set(entity.id, entity);
       this.eid = Math.max(this.eid, entity.id + 1);
 
@@ -361,12 +548,19 @@ export class Context<T = any> {
       for (const gData of data.groups) {
         const group = new Group(gData.id, gData.name);
         group.position.set(gData.position.x, gData.position.y);
+        group.parentId = gData.parentId;
         for (const eid of gData.entities) {
           group.add(eid);
+        }
+        if (gData.groups) {
+          for (const gid of gData.groups) {
+            group.addGroup(gid);
+          }
         }
         this.groups.set(group.id, group);
         this.gid = Math.max(this.gid, group.id + 1);
       }
     }
+    this.updateQuadTree();
   }
 }

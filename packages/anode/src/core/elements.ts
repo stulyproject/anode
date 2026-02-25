@@ -53,6 +53,7 @@ export class Entity<T = any> {
   sockets: Map<number, Socket> = new Map();
   #id: number;
   #onMove: ((pos: Vec2) => void)[] = [];
+  parentId: number | null = null;
 
   constructor(id: number, inner: T) {
     this.#id = id;
@@ -87,7 +88,9 @@ export class Group {
   #id: number;
   name: string;
   entities: Set<number> = new Set();
+  groups: Set<number> = new Set();
   position: Vec2 = new Vec2();
+  parentId: number | null = null;
 
   constructor(id: number, name: string = '') {
     this.#id = id;
@@ -105,10 +108,21 @@ export class Group {
   remove(entityId: number) {
     this.entities.delete(entityId);
   }
+
+  addGroup(groupId: number) {
+    this.groups.add(groupId);
+  }
+
+  removeGroup(groupId: number) {
+    this.groups.delete(groupId);
+  }
 }
 
 export enum LinkKind {
-  LINE = 'LINE'
+  LINE = 'LINE',
+  STEP = 'STEP',
+  SMOOTH_STEP = 'SMOOTH_STEP',
+  BEZIER = 'BEZIER'
 }
 
 /** A connection between sockets */

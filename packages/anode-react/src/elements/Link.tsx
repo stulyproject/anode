@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAnode } from '../context.js';
+import { useAnode, useSelection } from '../context.js';
 import { getLinkPath } from 'anode';
 
 export interface LinkProps {
@@ -8,36 +8,59 @@ export interface LinkProps {
 
 export const Link: React.FC<LinkProps> = ({ id }) => {
   const ctx = useAnode();
+  const { selection, setSelection } = useSelection();
   const link = ctx.links.get(id);
   const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!link) return;
-    const fromSocket = ctx.sockets.get(link.from);
-    const toSocket = ctx.sockets.get(link.to);
-    if (!fromSocket || !toSocket) return;
 
-    const fromEntity = ctx.entities.get(fromSocket.entityId);
-    const toEntity = ctx.entities.get(toSocket.entityId);
-    if (!fromEntity || !toEntity) return;
+    const onUpdate = () => setTick((t) => t + 1);
 
-    const onMove = () => setTick((t) => t + 1);
-
-    const off1 = fromEntity.onMove(onMove);
-    const off2 = toEntity.onMove(onMove);
+    // Subscribe to everything that affects the path
+    const h1 = ctx.registerEntityMoveListener(onUpdate);
+    const h2 = ctx.registerSocketMoveListener(onUpdate);
+    const h3 = ctx.registerSocketCreateListener(onUpdate); // Trigger if sockets appear later
 
     return () => {
-      off1();
-      off2();
+      ctx.unregisterListener(h1);
+      ctx.unregisterListener(h2);
+      ctx.unregisterListener(h3);
     };
   }, [ctx, link]);
 
   if (!link) return null;
 
-  const path = getLinkPath(ctx, link);
-  if (!path) return null;
+  const d = getLinkPath(ctx, link);
+  if (!d) return null;
 
-  const d = `M ${path.from.x} ${path.from.y} C ${path.control1.x} ${path.control1.y}, ${path.control2.x} ${path.control2.y}, ${path.to.x} ${path.to.y}`;
+  const isSelected = selection.links.has(id);
 
-  return <path d={d} fill="none" stroke="#94a3b8" strokeWidth={2} />;
+  const onClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.shiftKey) {
+      setSelection((prev) => {
+        const next = new Set(prev.links);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return { ...prev, links: next };
+      });
+    } else {
+      setSelection({ nodes: new Set(), links: new Set([id]) });
+    }
+  };
+
+  return (
+    <g onClick={onClick} style={{ cursor: 'pointer' }}>
+      {/* Invisible thicker path for easier clicking */}
+      <path d={d} fill="none" stroke="transparent" strokeWidth={15} />
+      <path
+        d={d}
+        fill="none"
+        stroke={isSelected ? '#3b82f6' : '#94a3b8'}
+        strokeWidth={isSelected ? 3 : 2}
+        transition="stroke 0.2s, stroke-width 0.2s"
+      />
+    </g>
+  );
 };
