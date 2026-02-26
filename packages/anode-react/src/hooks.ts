@@ -139,3 +139,29 @@ export function useSocketValue<T = any>(socketId: number | null): T {
 
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 }
+
+export const useGroups = () => {
+  const ctx = useAnode();
+  const store = useMemo(() => {
+    let snapshot = Array.from(ctx.groups.values());
+    return {
+      subscribe: (onStoreChange: () => void) => {
+        snapshot = Array.from(ctx.groups.values());
+        const update = () => {
+          snapshot = Array.from(ctx.groups.values());
+          onStoreChange();
+        };
+        const handles = [
+          ctx.registerGroupCreateListener(update),
+          ctx.registerGroupDropListener(update),
+          ctx.registerEntityMoveListener(update), // Groups might need re-render on entity move if calculating bounds
+          ctx.registerBulkChangeListener(update)
+        ];
+        return () => handles.forEach((h) => ctx.unregisterListener(h));
+      },
+      getSnapshot: () => snapshot
+    };
+  }, [ctx]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+};

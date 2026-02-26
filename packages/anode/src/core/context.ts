@@ -798,7 +798,7 @@ export class Context<T = any> {
   newLink(
     from: Socket,
     to: Socket,
-    kind: LinkKind = LinkKind.LINE,
+    kind: LinkKind = LinkKind.BEZIER,
     forcedId?: number,
     inner: any = {}
   ) {

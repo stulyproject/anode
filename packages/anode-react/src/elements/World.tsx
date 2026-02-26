@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useAnode, useViewport, useSelection, AnodeReactContext } from '../context.js';
-import { useVisibleNodes, useEdges } from '../hooks.js';
+import { useVisibleNodes, useEdges, useGroups } from '../hooks.js';
 import { Node } from './Node.js';
 import type { NodeComponentProps } from './Node.js';
+import { Group } from './Group.js';
 import { Link, type LinkComponentProps } from './Link.js';
 import { Vec2, LinkKind, Rect, Context } from 'anode';
 
@@ -298,6 +299,7 @@ export const World: React.FC<{
 
   const entities = useVisibleNodes(containerSize);
   const links = useEdges();
+  const groups = useGroups();
   const [pendingLink, setPendingLink] = useState<{
     fromId: number;
     fromPos: Vec2;
@@ -812,6 +814,9 @@ export const World: React.FC<{
             pointerEvents: 'none'
           }}
         >
+          {groups.map((group) => (
+            <Group key={group.id} id={group.id} />
+          ))}
           {entities.map((entity) => {
             const type = entity.inner?.type || 'default';
             const Component = nodeTypes[type] || DefaultNode;

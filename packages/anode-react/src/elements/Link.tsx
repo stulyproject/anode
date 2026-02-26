@@ -157,9 +157,15 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
                 r={4}
                 fill="#3b82f6"
                 onMouseDown={(e) => onWaypointMouseDown(e, i)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const newWaypoints = link.waypoints.filter((_, idx) => idx !== i);
+                  ctx.setLinkWaypoints(link, newWaypoints);
+                }}
                 style={{ cursor: 'move', pointerEvents: 'auto' }}
               />
-            ))}
+            ))}{' '}
           </>
         )}
       </g>
