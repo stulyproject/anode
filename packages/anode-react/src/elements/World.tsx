@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useAnode, useViewport, useSelection } from '../context.js';
+import React, { useState, useRef, useEffect, useContext } from 'react';
+import { useAnode, useViewport, useSelection, AnodeReactContext } from '../context.js';
 import { useVisibleNodes, useEdges } from '../hooks.js';
 import { Node } from './Node.js';
 import { Link } from './Link.js';
@@ -14,6 +14,17 @@ const DefaultNode: React.FC<NodeComponentProps> = ({ entity }) => (
     {entity.inner?.label || `Node ${entity.id}`}
   </div>
 );
+
+const getDistance = (t1: React.Touch | Touch, t2: React.Touch | Touch) => {
+  return Math.sqrt(Math.pow(t2.clientX - t1.clientX, 2) + Math.pow(t2.clientY - t1.clientY, 2));
+};
+
+const getCenter = (t1: React.Touch | Touch, t2: React.Touch | Touch) => {
+  return {
+    x: (t1.clientX + t2.clientX) / 2,
+    y: (t1.clientY + t2.clientY) / 2
+  };
+};
 
 export const World: React.FC<{
   children?: React.ReactNode;
@@ -32,8 +43,21 @@ export const World: React.FC<{
 }) => {
   const ctx = useAnode();
   const { viewport: transform, setViewport: setTransform } = useViewport();
+  const { setScreenToWorld } = useContext(AnodeReactContext)!;
   const { selection, setSelection } = useSelection();
   const worldRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setScreenToWorld(() => (clientX: number, clientY: number) => {
+      if (!worldRef.current) return { x: clientX, y: clientY };
+      const rect = worldRef.current.getBoundingClientRect();
+      return {
+        x: (clientX - rect.left - transformRef.current.x) / transformRef.current.k,
+        y: (clientY - rect.top - transformRef.current.y) / transformRef.current.k
+      };
+    });
+  }, [setScreenToWorld]);
+
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const transformRef = useRef(transform);
   transformRef.current = transform;
@@ -150,9 +174,14 @@ export const World: React.FC<{
         isValid: true
       });
 
-      const onMouseMove = (moveEvent: MouseEvent) => {
-        const target = moveEvent.target as HTMLElement;
-        const targetSocketEl = target.closest('.anode-socket') as HTMLElement;
+      const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+        const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
+        const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : moveEvent.clientY;
+        const target =
+          'touches' in moveEvent
+            ? document.elementFromPoint(clientX, clientY)
+            : (moveEvent.target as HTMLElement);
+        const targetSocketEl = target?.closest('.anode-socket') as HTMLElement;
         let isValid = true;
 
         if (targetSocketEl) {
@@ -169,8 +198,8 @@ export const World: React.FC<{
             ? {
                 ...prev,
                 toPos: new Vec2(
-                  (moveEvent.clientX - rect.left - transform.x) / transform.k,
-                  (moveEvent.clientY - rect.top - transform.y) / transform.k
+                  (clientX - rect.left - transform.x) / transform.k,
+                  (clientY - rect.top - transform.y) / transform.k
                 ),
                 isValid
               }
@@ -178,12 +207,21 @@ export const World: React.FC<{
         );
       };
 
-      const onMouseUp = (upEvent: MouseEvent) => {
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+      const onUp = (upEvent: MouseEvent | TouchEvent) => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
 
-        const target = upEvent.target as HTMLElement;
-        const targetSocket = target.closest('.anode-socket') as HTMLElement;
+        let target: HTMLElement | null = null;
+        if ('changedTouches' in upEvent) {
+          const touch = upEvent.changedTouches[0];
+          target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
+        } else {
+          target = upEvent.target as HTMLElement;
+        }
+
+        const targetSocket = target?.closest('.anode-socket') as HTMLElement;
         if (targetSocket) {
           const toId = parseInt(targetSocket.getAttribute('data-socket-id') || '');
           const from = ctx.sockets.get(socketId);
@@ -204,8 +242,10 @@ export const World: React.FC<{
         setPendingLink(null);
       };
 
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onUp);
     };
 
     const el = worldRef.current;
@@ -242,11 +282,85 @@ export const World: React.FC<{
     document.addEventListener('mouseup', onMouseUp);
   };
 
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      if (e.target !== worldRef.current) return;
+      setSelection({ nodes: new Set(), links: new Set() });
+      const touch = e.touches[0];
+      const startX = touch.clientX - transform.x;
+      const startY = touch.clientY - transform.y;
+
+      const onTouchMove = (moveEvent: TouchEvent) => {
+        if (moveEvent.touches.length === 1) {
+          const touch = moveEvent.touches[0];
+          setTransform((prev) => ({
+            ...prev,
+            x: touch.clientX - startX,
+            y: touch.clientY - startY
+          }));
+        }
+      };
+
+      const onTouchEnd = () => {
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+      };
+
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const initialDist = getDistance(t1, t2);
+      const initialCenter = getCenter(t1, t2);
+      const initialTransform = { ...transformRef.current };
+
+      const onTouchMove = (moveEvent: TouchEvent) => {
+        if (moveEvent.touches.length === 2) {
+          const mt1 = moveEvent.touches[0];
+          const mt2 = moveEvent.touches[1];
+          const currentDist = getDistance(mt1, mt2);
+          const currentCenter = getCenter(mt1, mt2);
+
+          const factor = currentDist / initialDist;
+          const newK = Math.min(Math.max(initialTransform.k * factor, 0.1), 5);
+
+          const rect = worldRef.current?.getBoundingClientRect();
+          if (!rect) return;
+
+          const zoomCenterX = initialCenter.x - rect.left;
+          const zoomCenterY = initialCenter.y - rect.top;
+
+          const beforeKCenterX = (zoomCenterX - initialTransform.x) / initialTransform.k;
+          const beforeKCenterY = (zoomCenterY - initialTransform.y) / initialTransform.k;
+
+          const dx = currentCenter.x - initialCenter.x;
+          const dy = currentCenter.y - initialCenter.y;
+
+          const newX = zoomCenterX - beforeKCenterX * newK + dx;
+          const newY = zoomCenterY - beforeKCenterY * newK + dy;
+
+          setTransform({ x: newX, y: newY, k: newK });
+          if (moveEvent.cancelable) moveEvent.preventDefault();
+        }
+      };
+
+      const onTouchEnd = () => {
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+      };
+
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+    }
+  };
+
   return (
     <div
       ref={worldRef}
       className="anode-world"
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
       style={{
         position: 'relative',
         width: '100%',

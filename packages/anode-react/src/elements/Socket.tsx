@@ -99,6 +99,17 @@ export const Socket: React.FC<SocketProps> = ({ entityId, kind, name, className,
         });
         ref.current?.dispatchEvent(event);
       }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+        if (socketId === null) return;
+
+        const touch = e.touches[0];
+        const event = new CustomEvent('anode-link-start', {
+          bubbles: true,
+          detail: { socketId, kind, x: touch.clientX, y: touch.clientY }
+        });
+        ref.current?.dispatchEvent(event);
+      }}
     />
   );
 };

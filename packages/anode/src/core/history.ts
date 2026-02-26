@@ -1,4 +1,4 @@
-import { Vec2, LinkKind, SocketKind } from './elements';
+import { LinkKind, SocketKind } from './elements';
 
 export type HistoryAction =
   | {

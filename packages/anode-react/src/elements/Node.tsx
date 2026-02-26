@@ -91,6 +91,44 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
         document.addEventListener('mouseup', onMouseUp);
         e.stopPropagation();
       }}
+      onTouchStart={(e) => {
+        setIsDragging(true);
+
+        setSelection({ nodes: new Set([id]), links: new Set() });
+
+        const touch = e.touches[0];
+        const startX = touch.clientX;
+        const startY = touch.clientY;
+        const startPosX = entity.position.x;
+        const startPosY = entity.position.y;
+
+        const onTouchMove = (moveEvent: TouchEvent) => {
+          const touch = moveEvent.touches[0];
+          const dx = (touch.clientX - startX) / viewport.k;
+          const dy = (touch.clientY - startY) / viewport.k;
+
+          let newX = startPosX + dx;
+          let newY = startPosY + dy;
+
+          const gridSize = 15;
+          newX = Math.round(newX / gridSize) * gridSize;
+          newY = Math.round(newY / gridSize) * gridSize;
+
+          entity.move(newX, newY);
+          // Prevent scrolling while dragging
+          if (moveEvent.cancelable) moveEvent.preventDefault();
+        };
+
+        const onTouchEnd = () => {
+          setIsDragging(false);
+          document.removeEventListener('touchmove', onTouchMove);
+          document.removeEventListener('touchend', onTouchEnd);
+        };
+
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd);
+        e.stopPropagation();
+      }}
     >
       {children}
     </div>

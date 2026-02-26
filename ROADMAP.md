@@ -19,7 +19,7 @@
   - [x] Deletion support (Backspace/Delete keys).
   - [x] Snap-to-grid while dragging.
   - [ ] **Box Selection**: Drag marquee to select multiple elements.
-  - [ ] **Touch Support**: Pinch-to-zoom and touch dragging.
+  - [x] **Touch Support**: Pinch-to-zoom and touch dragging.
 - [x] **Components**:
   - [x] **MiniMap**: A small preview of the graph.
   - [x] **Controls**: Zoom in/out/reset buttons.
