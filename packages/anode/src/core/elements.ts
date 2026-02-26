@@ -132,6 +132,7 @@ export class Link {
   from: number; // Socket ID
   to: number; // Socket ID
   kind: LinkKind;
+  waypoints: Vec2[] = [];
 
   constructor(id: number, from: number, to: number, kind = LinkKind.LINE) {
     this.#id = id;

@@ -32,6 +32,7 @@ export class Context<T = any> {
 
   private linkCreateCallbacks: Map<number, LinkCallback> = new Map();
   private linkDropCallbacks: Map<number, LinkCallback> = new Map();
+  private linkUpdateCallbacks: Map<number, LinkCallback> = new Map();
 
   private socketCreateCallbacks: Map<number, SocketCallback> = new Map();
   private socketDropCallbacks: Map<number, SocketCallback> = new Map();
@@ -300,6 +301,18 @@ export class Context<T = any> {
         }
         break;
       }
+      case 'UPDATE_LINK': {
+        const link = this.links.get(action.id);
+        if (link) {
+          link.from = action.from.new;
+          link.to = action.to.new;
+          if (action.waypoints) {
+            link.waypoints = action.waypoints.new.map((p) => new Vec2(p.x, p.y));
+          }
+          for (const cb of this.linkUpdateCallbacks.values()) cb(link);
+        }
+        break;
+      }
       case 'ADD_TO_GROUP': {
         this.addToGroup(action.groupId, action.entityId);
         break;
@@ -382,6 +395,12 @@ export class Context<T = any> {
     return handle;
   }
 
+  registerLinkUpdateListener(cb: LinkCallback): CallbackHandle {
+    const handle = this.getNextCallbackHandle();
+    this.linkUpdateCallbacks.set(handle, cb);
+    return handle;
+  }
+
   registerSocketCreateListener(cb: SocketCallback): CallbackHandle {
     const handle = this.getNextCallbackHandle();
     this.socketCreateCallbacks.set(handle, cb);
@@ -410,6 +429,7 @@ export class Context<T = any> {
     const deleted =
       this.linkCreateCallbacks.delete(handle) ||
       this.linkDropCallbacks.delete(handle) ||
+      this.linkUpdateCallbacks.delete(handle) ||
       this.entityCreateCallbacks.delete(handle) ||
       this.entityDropCallbacks.delete(handle) ||
       this.entityMoveCallbacks.delete(handle) ||
@@ -601,9 +621,13 @@ export class Context<T = any> {
     }
   }
 
-  newEntity(inner: T) {
-    const ett = new Entity(this.getNextEid(), inner);
+  newEntity(inner: T, forcedId?: number) {
+    const id = forcedId ?? this.getNextEid();
+    const ett = new Entity(id, inner);
     this.entities.set(ett.id, ett);
+    if (forcedId !== undefined) {
+      this.eid = Math.max(this.eid, forcedId + 1);
+    }
 
     this.setupEntity(ett);
 
@@ -684,10 +708,14 @@ export class Context<T = any> {
     }
   }
 
-  newSocket(entity: Entity<T>, kind: SocketKind, name: string = '') {
-    const socket = new Socket(this.getNextSid(), entity.id, kind, name);
+  newSocket(entity: Entity<T>, kind: SocketKind, name: string = '', forcedId?: number) {
+    const id = forcedId ?? this.getNextSid();
+    const socket = new Socket(id, entity.id, kind, name);
     this.sockets.set(socket.id, socket);
     entity.sockets.set(socket.id, socket);
+    if (forcedId !== undefined) {
+      this.sid = Math.max(this.sid, forcedId + 1);
+    }
 
     if (!this.isApplyingHistory) {
       this.record(
@@ -767,12 +795,16 @@ export class Context<T = any> {
     }
   }
 
-  newLink(from: Socket, to: Socket, kind: LinkKind = LinkKind.LINE) {
+  newLink(from: Socket, to: Socket, kind: LinkKind = LinkKind.LINE, forcedId?: number) {
     if (!this.canLink(from, to)) {
       return null;
     }
-    const link = new Link(this.getNextLid(), from.id, to.id, kind);
+    const id = forcedId ?? this.getNextLid();
+    const link = new Link(id, from.id, to.id, kind);
     this.links.set(link.id, link);
+    if (forcedId !== undefined) {
+      this.lid = Math.max(this.lid, forcedId + 1);
+    }
 
     if (!this.isApplyingHistory) {
       this.record(
@@ -795,6 +827,90 @@ export class Context<T = any> {
       }
     }
     return link;
+  }
+
+  updateLink(link: Link, fromId?: number, toId?: number) {
+    const oldFrom = link.from;
+    const oldTo = link.to;
+    const newFrom = fromId ?? oldFrom;
+    const newTo = toId ?? oldTo;
+
+    if (oldFrom === newFrom && oldTo === newTo) return;
+
+    const fromSocket = this.sockets.get(newFrom);
+    const toSocket = this.sockets.get(newTo);
+
+    if (!fromSocket || !toSocket || !this.canLink(fromSocket, toSocket)) {
+      return;
+    }
+
+    const oldWaypoints = link.waypoints.map((p) => ({ x: p.x, y: p.y }));
+
+    if (!this.isApplyingHistory) {
+      this.record(
+        {
+          type: 'UPDATE_LINK',
+          id: link.id,
+          from: { old: oldFrom, new: newFrom },
+          to: { old: oldTo, new: newTo },
+          waypoints: { old: oldWaypoints, new: oldWaypoints }
+        },
+        {
+          type: 'UPDATE_LINK',
+          id: link.id,
+          from: { old: newFrom, new: oldFrom },
+          to: { old: newTo, new: oldTo },
+          waypoints: { old: oldWaypoints, new: oldWaypoints }
+        },
+        'Update Link'
+      );
+    }
+
+    link.from = newFrom;
+    link.to = newTo;
+
+    for (const cb of this.linkUpdateCallbacks.values()) {
+      try {
+        cb(link);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+
+  setLinkWaypoints(link: Link, waypoints: Vec2[]) {
+    const oldWaypoints = link.waypoints.map((p) => ({ x: p.x, y: p.y }));
+    const newWaypoints = waypoints.map((p) => ({ x: p.x, y: p.y }));
+
+    if (!this.isApplyingHistory) {
+      this.record(
+        {
+          type: 'UPDATE_LINK',
+          id: link.id,
+          from: { old: link.from, new: link.from },
+          to: { old: link.to, new: link.to },
+          waypoints: { old: oldWaypoints, new: newWaypoints }
+        },
+        {
+          type: 'UPDATE_LINK',
+          id: link.id,
+          from: { old: link.from, new: link.from },
+          to: { old: link.to, new: link.to },
+          waypoints: { old: newWaypoints, new: oldWaypoints }
+        },
+        'Update Link Routing'
+      );
+    }
+
+    link.waypoints = waypoints.map((p) => p.clone());
+
+    for (const cb of this.linkUpdateCallbacks.values()) {
+      try {
+        cb(link);
+      } catch (err) {
+        console.error(err);
+      }
+    }
   }
 
   canLink(from: Socket, to: Socket) {
@@ -887,7 +1003,8 @@ export class Context<T = any> {
         id: l.id,
         from: l.from,
         to: l.to,
-        kind: l.kind
+        kind: l.kind,
+        waypoints: l.waypoints.map((p) => ({ x: p.x, y: p.y }))
       })),
       groups: Array.from(this.groups.values()).map((g) => ({
         id: g.id,
@@ -934,6 +1051,9 @@ export class Context<T = any> {
 
     for (const lData of data.links) {
       const link = new Link(lData.id, lData.from, lData.to, lData.kind);
+      if (lData.waypoints) {
+        link.waypoints = lData.waypoints.map((p: any) => new Vec2(p.x, p.y));
+      }
       this.links.set(link.id, link);
       this.lid = Math.max(this.lid, link.id + 1);
     }

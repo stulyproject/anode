@@ -1,7 +1,7 @@
 import { Context } from './context';
 import { Link, Vec2, LinkKind } from './elements';
 
-export function getLinkPath(ctx: Context, link: Link): string | null {
+export function getLinkPoints(ctx: Context, link: Link): { from: Vec2; to: Vec2 } | null {
   const fromSocket = ctx.sockets.get(link.from);
   const toSocket = ctx.sockets.get(link.to);
 
@@ -17,38 +17,77 @@ export function getLinkPath(ctx: Context, link: Link): string | null {
   const fromWorldPos = ctx.getWorldPosition(fromEntity.id);
   const toWorldPos = ctx.getWorldPosition(toEntity.id);
 
-  const fromPos = new Vec2(
-    fromWorldPos.x + fromSocket.offset.x,
-    fromWorldPos.y + fromSocket.offset.y
-  );
+  return {
+    from: new Vec2(fromWorldPos.x + fromSocket.offset.x, fromWorldPos.y + fromSocket.offset.y),
+    to: new Vec2(toWorldPos.x + toSocket.offset.x, toWorldPos.y + toSocket.offset.y)
+  };
+}
 
-  const toPos = new Vec2(toWorldPos.x + toSocket.offset.x, toWorldPos.y + toSocket.offset.y);
+export function getLinkPath(ctx: Context, link: Link): string | null {
+  const pts = getLinkPoints(ctx, link);
+  if (!pts) return null;
+
+  const { from: fromPos, to: toPos } = pts;
+  const points = [fromPos, ...link.waypoints, toPos];
 
   if (link.kind === LinkKind.LINE) {
-    return `M ${fromPos.x} ${fromPos.y} L ${toPos.x} ${toPos.y}`;
+    return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
   }
 
   if (link.kind === LinkKind.BEZIER) {
-    const dx = Math.abs(fromPos.x - toPos.x);
-    const offset = Math.max(dx / 2, 50);
-    return `M ${fromPos.x} ${fromPos.y} C ${fromPos.x + offset} ${fromPos.y}, ${toPos.x - offset} ${toPos.y}, ${toPos.x} ${toPos.y}`;
+    if (points.length === 2) {
+      const p1 = points[0]!;
+      const p2 = points[1]!;
+      const dx = Math.abs(p1.x - p2.x);
+      const offset = Math.max(dx / 2, 50);
+      return `M ${p1.x} ${p1.y} C ${p1.x + offset} ${p1.y}, ${p2.x - offset} ${p2.y}, ${p2.x} ${p2.y}`;
+    }
+
+    let path = `M ${points[0]!.x} ${points[0]!.y}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i]!;
+      const p2 = points[i + 1]!;
+      const dx = Math.abs(p1.x - p2.x);
+      const offset = Math.max(dx / 2, 20);
+      path += ` C ${p1.x + offset} ${p1.y}, ${p2.x - offset} ${p2.y}, ${p2.x} ${p2.y}`;
+    }
+    return path;
   }
 
   if (link.kind === LinkKind.STEP || link.kind === LinkKind.SMOOTH_STEP) {
-    const midX = (fromPos.x + toPos.x) / 2;
-    if (link.kind === LinkKind.STEP) {
-      return `M ${fromPos.x} ${fromPos.y} L ${midX} ${fromPos.y} L ${midX} ${toPos.y} L ${toPos.x} ${toPos.y}`;
-    }
+    let path = `M ${points[0]!.x} ${points[0]!.y}`;
+    const isSmooth = link.kind === LinkKind.SMOOTH_STEP;
     const borderRadius = 10;
-    const signX = toPos.x > fromPos.x ? 1 : -1;
-    const signY = toPos.y > fromPos.y ? 1 : -1;
 
-    return `M ${fromPos.x} ${fromPos.y} 
-            L ${midX - borderRadius * signX} ${fromPos.y} 
-            Q ${midX} ${fromPos.y} ${midX} ${fromPos.y + borderRadius * signY}
-            L ${midX} ${toPos.y - borderRadius * signY}
-            Q ${midX} ${toPos.y} ${midX + borderRadius * signX} ${toPos.y}
-            L ${toPos.x} ${toPos.y}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i]!;
+      const p2 = points[i + 1]!;
+      const midX = (p1.x + p2.x) / 2;
+
+      if (!isSmooth) {
+        path += ` L ${midX} ${p1.y} L ${midX} ${p2.y} L ${p2.x} ${p2.y}`;
+      } else {
+        const signX = p2.x > p1.x ? 1 : -1;
+        const signY = p2.y > p1.y ? 1 : -1;
+        const actualBorder = Math.min(
+          borderRadius,
+          Math.abs(p1.x - p2.x) / 2,
+          Math.abs(p1.y - p2.y) / 2
+        );
+
+        if (actualBorder < 1) {
+          // Points are aligned, draw a straight line for this segment
+          path += ` L ${p2.x} ${p2.y}`;
+        } else {
+          path += ` L ${midX - actualBorder * signX} ${p1.y} 
+                    Q ${midX} ${p1.y} ${midX} ${p1.y + actualBorder * signY}
+                    L ${midX} ${p2.y - actualBorder * signY}
+                    Q ${midX} ${p2.y} ${midX + actualBorder * signX} ${p2.y}
+                    L ${p2.x} ${p2.y}`;
+        }
+      }
+    }
+    return path;
   }
 
   return null;

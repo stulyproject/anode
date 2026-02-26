@@ -3,9 +3,7 @@
     "module": "nodenext",
     "target": "esnext",
     "types": [],
-    "paths": {
-      // "anode": ["../../src/anode.ts"]
-    },
+    "paths": {},
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "strict": true,

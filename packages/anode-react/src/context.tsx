@@ -12,7 +12,9 @@ interface AnodeContextValue {
   viewport: Viewport;
   setViewport: (v: Viewport) => void;
   screenToWorld: (clientX: number, clientY: number) => { x: number; y: number };
-  setScreenToWorld: (fn: (clientX: number, clientY: number) => { x: number; y: number }) => void;
+  setScreenToWorld: React.Dispatch<
+    React.SetStateAction<(clientX: number, clientY: number) => { x: number; y: number }>
+  >;
   selection: {
     nodes: Set<number>;
     links: Set<number>;
@@ -58,7 +60,7 @@ export const AnodeProvider: React.FC<{ children: React.ReactNode; context?: Cont
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, k: 1 });
   const [screenToWorld, setScreenToWorld] = useState<
     (clientX: number, clientY: number) => { x: number; y: number }
-  >(() => (x, y) => ({ x, y }));
+  >(() => (x: number, y: number) => ({ x, y }));
   const [selection, setSelection] = useState({
     nodes: new Set<number>(),
     links: new Set<number>()

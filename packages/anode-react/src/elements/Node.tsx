@@ -24,7 +24,9 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
     };
 
     const handle = ctx.registerEntityMoveListener(onMove);
-    return () => ctx.unregisterListener(handle);
+    return () => {
+      ctx.unregisterListener(handle);
+    };
   }, [ctx, id, entity]);
 
   if (!entity) return null;
@@ -97,6 +99,7 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
         setSelection({ nodes: new Set([id]), links: new Set() });
 
         const touch = e.touches[0];
+        if (!touch) return;
         const startX = touch.clientX;
         const startY = touch.clientY;
         const startPosX = entity.position.x;
@@ -104,6 +107,7 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
 
         const onTouchMove = (moveEvent: TouchEvent) => {
           const touch = moveEvent.touches[0];
+          if (!touch) return;
           const dx = (touch.clientX - startX) / viewport.k;
           const dy = (touch.clientY - startY) / viewport.k;
 

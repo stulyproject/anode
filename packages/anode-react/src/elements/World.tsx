@@ -9,6 +9,23 @@ export interface NodeComponentProps {
   entity: Entity;
 }
 
+export interface NodeData {
+  id: number;
+  position: { x: number; y: number };
+  type?: string;
+  data?: any;
+}
+
+export interface LinkData {
+  id: number;
+  source: number;
+  sourceHandle: string;
+  target: number;
+  targetHandle: string;
+  kind?: LinkKind;
+  waypoints?: { x: number; y: number }[];
+}
+
 const DefaultNode: React.FC<NodeComponentProps> = ({ entity }) => (
   <div style={{ padding: 10, background: 'white', border: '1px solid #ccc', borderRadius: 4 }}>
     {entity.inner?.label || `Node ${entity.id}`}
@@ -34,6 +51,10 @@ export const World: React.FC<{
   defaultLinkKind?: LinkKind;
   onConnect?: (fromId: number, toId: number) => void;
   isValidConnection?: (from: any, to: any) => boolean;
+  nodes?: NodeData[];
+  links?: LinkData[];
+  onNodesChange?: (nodes: NodeData[]) => void;
+  onLinksChange?: (links: LinkData[]) => void;
 }> = ({
   children,
   style,
@@ -41,7 +62,11 @@ export const World: React.FC<{
   defaultLinkKind = LinkKind.SMOOTH_STEP,
   onConnect,
   isValidConnection,
-  selectionBoxStyle
+  selectionBoxStyle,
+  nodes,
+  links: linksProp,
+  onNodesChange,
+  onLinksChange
 }) => {
   const ctx = useAnode();
   const { viewport: transform, setViewport: setTransform, screenToWorld } = useViewport();
@@ -67,6 +92,146 @@ export const World: React.FC<{
   }, [setScreenToWorld]);
 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  // --- Declarative Sync Logic ---
+
+  // Sync nodes prop to internal state
+  useEffect(() => {
+    if (!nodes) return;
+
+    ctx.batch(() => {
+      const currentIds = new Set(ctx.entities.keys());
+      const incomingIds = new Set(nodes.map((n) => n.id));
+
+      // Remove nodes not in props
+      for (const id of currentIds) {
+        if (!incomingIds.has(id)) {
+          const entity = ctx.entities.get(id);
+          if (entity) ctx.dropEntity(entity);
+        }
+      }
+
+      // Add or update nodes from props
+      for (const n of nodes) {
+        const entity = ctx.entities.get(n.id);
+        const innerData = { ...(n.data || {}), type: n.type };
+        if (!entity) {
+          const newEntity = ctx.newEntity(innerData, n.id);
+          newEntity.move(n.position.x, n.position.y);
+        } else {
+          // Update position if it changed significantly (avoiding minor float jitters)
+          if (
+            Math.abs(entity.position.x - n.position.x) > 0.01 ||
+            Math.abs(entity.position.y - n.position.y) > 0.01
+          ) {
+            entity.move(n.position.x, n.position.y);
+          }
+          // Update inner data
+          entity.setInner(innerData);
+        }
+      }
+    }, 'Sync Nodes from Props');
+  }, [ctx, nodes]);
+
+  // Sync links prop to internal state
+  useEffect(() => {
+    if (!linksProp) return;
+
+    const syncLinks = () => {
+      ctx.batch(() => {
+        const currentIds = new Set(ctx.links.keys());
+        const incomingIds = new Set(linksProp.map((l) => l.id));
+
+        // Remove links not in props
+        for (const id of currentIds) {
+          if (!incomingIds.has(id)) {
+            const link = ctx.links.get(id);
+            if (link) ctx.dropLink(link);
+          }
+        }
+
+        // Add links from props
+        for (const l of linksProp) {
+          if (!ctx.links.has(l.id)) {
+            const fromNode = ctx.entities.get(l.source);
+            const toNode = ctx.entities.get(l.target);
+            if (fromNode && toNode) {
+              const fromSocket = Array.from(fromNode.sockets.values()).find(
+                (s) => s.name === l.sourceHandle
+              );
+              const toSocket = Array.from(toNode.sockets.values()).find(
+                (s) => s.name === l.targetHandle
+              );
+
+              if (fromSocket && toSocket) {
+                const newLink = ctx.newLink(fromSocket, toSocket, l.kind || defaultLinkKind, l.id);
+                if (newLink && l.waypoints) {
+                  newLink.waypoints = l.waypoints.map((p) => new Vec2(p.x, p.y));
+                }
+              }
+            }
+          }
+        }
+      }, 'Sync Links from Props');
+    };
+
+    syncLinks();
+    // Also retry sync when sockets are created/dropped
+    const h1 = ctx.registerSocketCreateListener(syncLinks);
+    const h2 = ctx.registerSocketDropListener(syncLinks);
+    return () => {
+      ctx.unregisterListener(h1);
+      ctx.unregisterListener(h2);
+    };
+  }, [ctx, linksProp, defaultLinkKind]);
+
+  // Notify callbacks on internal changes
+  useEffect(() => {
+    if (!onNodesChange && !onLinksChange) return;
+
+    const notify = () => {
+      if (onNodesChange && nodes) {
+        const currentNodes = Array.from(ctx.entities.values()).map((e) => ({
+          id: e.id,
+          position: { x: e.position.x, y: e.position.y },
+          type: (e.inner as any)?.type,
+          data: e.inner
+        }));
+        onNodesChange(currentNodes);
+      }
+      if (onLinksChange && linksProp) {
+        const currentLinks = Array.from(ctx.links.values()).map((l) => {
+          const fromSocket = ctx.sockets.get(l.from);
+          const toSocket = ctx.sockets.get(l.to);
+          return {
+            id: l.id,
+            source: fromSocket?.entityId || 0,
+            sourceHandle: fromSocket?.name || '',
+            target: toSocket?.entityId || 0,
+            targetHandle: toSocket?.name || '',
+            kind: l.kind,
+            waypoints: l.waypoints.map((p) => ({ x: p.x, y: p.y }))
+          };
+        });
+        onLinksChange(currentLinks);
+      }
+    };
+
+    const handles = [
+      ctx.registerEntityCreateListener(notify),
+      ctx.registerEntityDropListener(notify),
+      ctx.registerEntityMoveListener(notify),
+      ctx.registerLinkCreateListener(notify),
+      ctx.registerLinkDropListener(notify),
+      ctx.registerLinkUpdateListener(notify),
+      ctx.registerBulkChangeListener(notify)
+    ];
+
+    return () => handles.forEach((h) => ctx.unregisterListener(h));
+  }, [ctx, onNodesChange, onLinksChange, nodes, linksProp]);
+
+  // --- End Declarative Sync Logic ---
+
   const transformRef = useRef(transform);
   transformRef.current = transform;
 
@@ -74,7 +239,9 @@ export const World: React.FC<{
   useEffect(() => {
     if (!worldRef.current) return;
     const observer = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
       setContainerSize({ width, height });
     });
     observer.observe(worldRef.current);
@@ -183,12 +350,12 @@ export const World: React.FC<{
       });
 
       const onMove = (moveEvent: MouseEvent | TouchEvent) => {
-        const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
-        const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : moveEvent.clientY;
-        const target =
-          'touches' in moveEvent
-            ? document.elementFromPoint(clientX, clientY)
-            : (moveEvent.target as HTMLElement);
+        const touches = (moveEvent as TouchEvent).touches;
+        const clientX = touches ? (touches[0]?.clientX ?? 0) : (moveEvent as MouseEvent).clientX;
+        const clientY = touches ? (touches[0]?.clientY ?? 0) : (moveEvent as MouseEvent).clientY;
+        const target = touches
+          ? document.elementFromPoint(clientX, clientY)
+          : (moveEvent.target as HTMLElement);
         const targetSocketEl = target?.closest('.anode-socket') as HTMLElement;
         let isValid = true;
 
@@ -222,9 +389,12 @@ export const World: React.FC<{
         document.removeEventListener('touchend', onUp);
 
         let target: HTMLElement | null = null;
-        if ('changedTouches' in upEvent) {
-          const touch = upEvent.changedTouches[0];
-          target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
+        const changedTouches = (upEvent as TouchEvent).changedTouches;
+        if (changedTouches) {
+          const touch = changedTouches[0];
+          target = touch
+            ? (document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement)
+            : null;
         } else {
           target = upEvent.target as HTMLElement;
         }
@@ -256,9 +426,123 @@ export const World: React.FC<{
       document.addEventListener('touchend', onUp);
     };
 
+    const handleReconnect = (e: any) => {
+      const { linkId, type, x, y } = e.detail;
+      const rect = worldRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const link = ctx.links.get(linkId);
+      if (!link) return;
+
+      const otherSocketId = type === 'from' ? link.to : link.from;
+      const otherSocket = ctx.sockets.get(otherSocketId);
+      if (!otherSocket) return;
+
+      const otherNodeWorldPos = ctx.getWorldPosition(otherSocket.entityId);
+      const otherPos = new Vec2(
+        otherNodeWorldPos.x + otherSocket.offset.x,
+        otherNodeWorldPos.y + otherSocket.offset.y
+      );
+
+      setPendingLink({
+        fromId: otherSocketId,
+        fromPos: otherPos,
+        toPos: new Vec2(
+          (x - rect.left - transform.x) / transform.k,
+          (y - rect.top - transform.y) / transform.k
+        ),
+        isValid: true
+      });
+
+      const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+        const touches = (moveEvent as TouchEvent).touches;
+        const clientX = touches ? (touches[0]?.clientX ?? 0) : (moveEvent as MouseEvent).clientX;
+        const clientY = touches ? (touches[0]?.clientY ?? 0) : (moveEvent as MouseEvent).clientY;
+        const target = touches
+          ? document.elementFromPoint(clientX, clientY)
+          : (moveEvent.target as HTMLElement);
+        const targetSocketEl = target?.closest('.anode-socket') as HTMLElement;
+        let isValid = true;
+
+        if (targetSocketEl) {
+          const toId = parseInt(targetSocketEl.getAttribute('data-socket-id') || '');
+          const toSocket = ctx.sockets.get(toId);
+          if (toSocket) {
+            // Check if we can link from the static end to the new target
+            // If type === 'from', we are moving the 'from' end, so we check if otherSocket (which is 'to') can link with new 'from'
+            // canLink(from, to)
+            const newFrom = type === 'from' ? toSocket : otherSocket;
+            const newTo = type === 'from' ? otherSocket : toSocket;
+            isValid =
+              ctx.canLink(newFrom, newTo) &&
+              (!isValidConnection || isValidConnection(newFrom, newTo));
+          }
+        }
+
+        setPendingLink((prev) =>
+          prev
+            ? {
+                ...prev,
+                toPos: new Vec2(
+                  (clientX - rect.left - transform.x) / transform.k,
+                  (clientY - rect.top - transform.y) / transform.k
+                ),
+                isValid
+              }
+            : null
+        );
+      };
+
+      const onUp = (upEvent: MouseEvent | TouchEvent) => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
+
+        let target: HTMLElement | null = null;
+        const changedTouches = (upEvent as TouchEvent).changedTouches;
+        if (changedTouches) {
+          const touch = changedTouches[0];
+          target = touch
+            ? (document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement)
+            : null;
+        } else {
+          target = upEvent.target as HTMLElement;
+        }
+
+        const targetSocketEl = target?.closest('.anode-socket') as HTMLElement;
+        if (targetSocketEl) {
+          const newSocketId = parseInt(targetSocketEl.getAttribute('data-socket-id') || '');
+          const newSocket = ctx.sockets.get(newSocketId);
+
+          if (newSocket) {
+            const newFrom = type === 'from' ? newSocket : otherSocket;
+            const newTo = type === 'from' ? otherSocket : newSocket;
+
+            if (
+              ctx.canLink(newFrom, newTo) &&
+              (!isValidConnection || isValidConnection(newFrom, newTo))
+            ) {
+              ctx.updateLink(link, newFrom.id, newTo.id);
+            }
+          }
+        }
+        setPendingLink(null);
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onUp);
+    };
+
     const el = worldRef.current;
     el?.addEventListener('anode-link-start', handleLinkStart);
-    return () => el?.removeEventListener('anode-link-start', handleLinkStart);
+    el?.addEventListener('anode-link-reconnect', handleReconnect);
+    return () => {
+      el?.removeEventListener('anode-link-start', handleLinkStart);
+      el?.removeEventListener('anode-link-reconnect', handleReconnect);
+    };
   }, [ctx, transform, defaultLinkKind, onConnect, isValidConnection]);
 
   const onMouseDown = (e: React.MouseEvent) => {
@@ -329,11 +613,11 @@ export const World: React.FC<{
     const startY = e.clientY - transform.y;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      setTransform((prev) => ({
-        ...prev,
+      setTransform({
         x: moveEvent.clientX - startX,
-        y: moveEvent.clientY - startY
-      }));
+        y: moveEvent.clientY - startY,
+        k: transformRef.current.k
+      });
     };
 
     const onMouseUp = () => {
@@ -350,17 +634,19 @@ export const World: React.FC<{
       if (e.target !== worldRef.current) return;
       setSelection({ nodes: new Set(), links: new Set() });
       const touch = e.touches[0];
+      if (!touch) return;
       const startX = touch.clientX - transform.x;
       const startY = touch.clientY - transform.y;
 
       const onTouchMove = (moveEvent: TouchEvent) => {
         if (moveEvent.touches.length === 1) {
           const touch = moveEvent.touches[0];
-          setTransform((prev) => ({
-            ...prev,
+          if (!touch) return;
+          setTransform({
             x: touch.clientX - startX,
-            y: touch.clientY - startY
-          }));
+            y: touch.clientY - startY,
+            k: transformRef.current.k
+          });
         }
       };
 
@@ -374,6 +660,7 @@ export const World: React.FC<{
     } else if (e.touches.length === 2) {
       const t1 = e.touches[0];
       const t2 = e.touches[1];
+      if (!t1 || !t2) return;
       const initialDist = getDistance(t1, t2);
       const initialCenter = getCenter(t1, t2);
       const initialTransform = { ...transformRef.current };
@@ -382,6 +669,7 @@ export const World: React.FC<{
         if (moveEvent.touches.length === 2) {
           const mt1 = moveEvent.touches[0];
           const mt2 = moveEvent.touches[1];
+          if (!mt1 || !mt2) return;
           const currentDist = getDistance(mt1, mt2);
           const currentCenter = getCenter(mt1, mt2);
 

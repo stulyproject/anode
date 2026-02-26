@@ -104,6 +104,7 @@ export const Socket: React.FC<SocketProps> = ({ entityId, kind, name, className,
         if (socketId === null) return;
 
         const touch = e.touches[0];
+        if (!touch) return;
         const event = new CustomEvent('anode-link-start', {
           bubbles: true,
           detail: { socketId, kind, x: touch.clientX, y: touch.clientY }

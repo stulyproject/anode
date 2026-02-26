@@ -24,6 +24,13 @@ export type HistoryAction =
     }
   | { type: 'CREATE_LINK'; id: number; from: number; to: number; kind: LinkKind }
   | { type: 'DROP_LINK'; id: number; from: number; to: number; kind: LinkKind }
+  | {
+      type: 'UPDATE_LINK';
+      id: number;
+      from: { old: number; new: number };
+      to: { old: number; new: number };
+      waypoints?: { old: { x: number; y: number }[]; new: { x: number; y: number }[] };
+    }
   | { type: 'ADD_TO_GROUP'; groupId: number; entityId: number; oldParentId: number | null }
   | { type: 'REMOVE_FROM_GROUP'; groupId: number; entityId: number; oldParentId: number | null }
   | {
