@@ -53,10 +53,70 @@ utilize specialized hooks to subscribe to specific socket changes, ensuring that
 components only update when their relevant data actually changes, further reducing
 unnecessary reconciliation work.
 
-### Implementation Overview
+### Quick Start Examples
+
+#### 1. Headless Core (Framework-Agnostic)
+
+```typescript
+import { Context, SocketKind } from 'anode';
+
+const ctx = new Context();
+
+// Create nodes and sockets
+const nodeA = ctx.newEntity({ label: 'Node A' });
+const outA = ctx.newSocket(nodeA, SocketKind.OUTPUT, 'out');
+
+const nodeB = ctx.newEntity({ label: 'Node B' });
+const inB = ctx.newSocket(nodeB, SocketKind.INPUT, 'in');
+
+// Connect them and move node
+ctx.newLink(outA, inB);
+nodeA.move(100, 100);
+```
+
+#### 2. React Integration
+
+```tsx
+import { AnodeProvider, World } from 'anode-react';
+
+const MyNode = ({ entity }) => <div>{entity.data.label}</div>;
+
+export default function App() {
+  return (
+    <AnodeProvider>
+      <World nodeTypes={{ myNode: MyNode }} />
+    </AnodeProvider>
+  );
+}
+```
+
+#### 3. Atomic Operations (History)
+
+```typescript
+// All changes inside batch() are recorded as a single undo/redo step
+ctx.batch(() => {
+  const node = ctx.newEntity({ label: 'Temporary Node' });
+  node.move(50, 50);
+}, 'Create and Move Node');
+
+ctx.history.undo();
+ctx.history.redo();
+```
+
+#### 4. Data Flow propagation
+
+```typescript
+// Sockets automatically propagate values to their links
+ctx.setSocketValue(outA.id, 42);
+
+// inB value will be 42 after propagation
+console.log(ctx.sockets.get(inB.id).value);
+```
+
+### Advanced Integration Example
 
 The following example demonstrates how the headless core and the React bindings
-interact to create a functional node graph.
+interact to create a functional node graph with reactive data calculation.
 
 ```tsx
 import { useEffect } from 'react';
@@ -94,15 +154,6 @@ const CalculationNode = ({ entity }: { entity: Entity }) => {
     </div>
   );
 };
-
-export default function App() {
-  return (
-    <AnodeProvider>
-      {/* The World component manages the semi-infinite canvas and coordinate systems */}
-      <World nodeTypes={{ calc: CalculationNode }}></World>
-    </AnodeProvider>
-  );
-}
 ```
 
 ### Technical Project Structure
@@ -112,6 +163,19 @@ export default function App() {
 - **anode-react (Bindings):** Provides the `World` canvas, `AnodeProvider`, and hooks
   for spatial queries (`useVisibleNodes`), socket management (`useEntitySockets`),
   and data subscription (`useSocketValue`).
+
+### Contributing
+
+We welcome contributions of all kinds! If you're interested in building bindings
+for other frameworks (like Vue, Svelte, or Solid), or if you want to improve
+the core engine, please feel free to open a PR.
+
+- **Framework Bindings:** If you want to contribute a binding for a framework
+  other than React, please follow the architecture of `anode-react` as a
+  reference. Use the headless `Context` and its subscription system to stay
+  in sync with the engine.
+- **Bug Fixes & Features:** Check the `ROADMAP.md` for inspiration or report
+  issues you've encountered.
 
 ### License
 
