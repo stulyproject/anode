@@ -6,7 +6,7 @@ on:
       - completed
   push:
     branches:
-      - 'main'
+      - 'master'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -35,7 +35,7 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: pnpm run build && pnpm changeset publish
+          publish: pnpm check && pnpm changeset publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

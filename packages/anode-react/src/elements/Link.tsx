@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAnode, useSelection, useViewport } from '../context.js';
-import { getLinkPath, getLinkPoints, getLinkCenter, Vec2, Link as LinkCore } from 'anode';
+import { getLinkPath, getLinkPoints, getLinkCenter, Vec2, Link as LinkCore } from '@stuly/anode';
 
 export interface LinkComponentProps {
   id: number;

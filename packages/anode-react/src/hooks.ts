@@ -1,7 +1,7 @@
 import React, { useSyncExternalStore, useMemo } from 'react';
 import { useAnode, useViewport } from './context.js';
-import { Entity, Link } from 'anode';
-import { Rect } from 'anode';
+import { Entity, Link } from '@stuly/anode';
+import { Rect } from '@stuly/anode';
 
 export const useNodes = () => {
   const ctx = useAnode();

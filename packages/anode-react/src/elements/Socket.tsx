@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useAnode, useViewport } from '../context.js';
-import { SocketKind } from 'anode';
+import { SocketKind } from '@stuly/anode';
 
 export interface SocketProps {
   entityId: number;

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAnode, useViewport, useSelection } from '../context.js';
-import { Entity } from 'anode';
+import { Entity } from '@stuly/anode';
 
 export interface NodeProps {
   id: number;

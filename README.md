@@ -58,7 +58,7 @@ unnecessary reconciliation work.
 #### 1. Headless Core (Framework-Agnostic)
 
 ```typescript
-import { Context, SocketKind } from 'anode';
+import { Context, SocketKind } from '@stuly/anode';
 
 const ctx = new Context();
 
@@ -77,7 +77,7 @@ nodeA.move(100, 100);
 #### 2. React Integration
 
 ```tsx
-import { AnodeProvider, World } from 'anode-react';
+import { AnodeProvider, World } from '@stuly/anode-react';
 
 const MyNode = ({ entity }) => <div>{entity.data.label}</div>;
 
@@ -127,8 +127,8 @@ import {
   useAnode,
   useSocketValue,
   useEntitySockets
-} from 'anode-react';
-import { Entity, SocketKind } from 'anode';
+} from '@stuly/anode-react';
+import { Entity, SocketKind } from '@stuly/anode';
 
 const CalculationNode = ({ entity }: { entity: Entity }) => {
   const ctx = useAnode();

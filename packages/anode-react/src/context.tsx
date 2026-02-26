@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Context } from 'anode';
+import { Context } from '@stuly/anode';
 
 interface Viewport {
   x: number;

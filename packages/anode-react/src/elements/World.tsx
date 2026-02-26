@@ -5,7 +5,7 @@ import { Node } from './Node.js';
 import type { NodeComponentProps } from './Node.js';
 import { Group } from './Group.js';
 import { Link, type LinkComponentProps } from './Link.js';
-import { Vec2, LinkKind, Rect, Context } from 'anode';
+import { Vec2, LinkKind, Rect, Context } from '@stuly/anode';
 
 export interface NodeData {
   id: number;
