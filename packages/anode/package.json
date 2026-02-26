@@ -1,6 +1,6 @@
 {
   "name": "@stuly/anode",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "main": "dist/anode.js",
   "module": "dist/anode.js",
   "types": "dist/anode.d.ts",
