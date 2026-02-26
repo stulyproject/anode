@@ -1,8 +1,17 @@
-import React, { useSyncExternalStore, useMemo } from 'react';
+import { useSyncExternalStore, useMemo } from 'react';
 import { useAnode, useViewport } from './context.js';
-import { Entity, Link } from '@stuly/anode';
+import { Entity, Link, Group } from '@stuly/anode';
 import { Rect } from '@stuly/anode';
 
+/**
+ * Returns an array of all entities currently in the graph.
+ * Reactively updates when nodes are created, deleted, or moved.
+ *
+ * **Usage:**
+ * ```tsx
+ * const nodes = useNodes();
+ * ```
+ */
 export const useNodes = () => {
   const ctx = useAnode();
   const store = useMemo(() => {
@@ -29,10 +38,21 @@ export const useNodes = () => {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 };
 
+/**
+ * Optimized hook for rendering a large-scale node graph.
+ * Performs a spatial query on the QuadTree to return only the nodes
+ * that are currently within the user's viewport (with padding).
+ *
+ * **Side Effects:** Triggers re-renders only when nodes enter or exit the viewport
+ * OR when a visible node is moved.
+ *
+ * @param containerRect The dimensions of the canvas container. If omitted, defaults to window size.
+ * @returns Array of visible Entity objects.
+ */
 export const useVisibleNodes = (containerRect?: { width: number; height: number }) => {
   const ctx = useAnode();
   const { viewport } = useViewport();
-  const allNodes = useNodes(); // Now triggers on move!
+  const allNodes = useNodes(); // Triggers on every move to sync visibility state
 
   return useMemo(() => {
     const w = (containerRect?.width || window.innerWidth) / viewport.k;
@@ -40,6 +60,7 @@ export const useVisibleNodes = (containerRect?: { width: number; height: number 
     const x = -viewport.x / viewport.k;
     const y = -viewport.y / viewport.k;
 
+    // Add some padding to avoid culling flickering at edges
     const padding = 300 / viewport.k;
     const queryRect = new Rect(x - padding, y - padding, w + padding * 2, h + padding * 2);
 
@@ -48,6 +69,11 @@ export const useVisibleNodes = (containerRect?: { width: number; height: number 
   }, [ctx, viewport, containerRect, allNodes]);
 };
 
+/**
+ * Returns an array of all links currently in the graph.
+ * Reactively updates when links are created, deleted, or updated,
+ * or when an endpoint entity moves (triggering path recalculation).
+ */
 export const useEdges = () => {
   const ctx = useAnode();
   const store = useMemo(() => {
@@ -63,7 +89,7 @@ export const useEdges = () => {
         const handles = [
           ctx.registerLinkCreateListener(update),
           ctx.registerLinkDropListener(update),
-          ctx.registerEntityMoveListener(update), // Links need re-render on entity move
+          ctx.registerEntityMoveListener(update), // Links need re-render on entity move for SVG path updates
           ctx.registerBulkChangeListener(update)
         ];
         return () => handles.forEach((h) => ctx.unregisterListener(h));
@@ -75,6 +101,12 @@ export const useEdges = () => {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 };
 
+/**
+ * Returns an array of all sockets associated with a specific entity.
+ * Reactively updates when sockets are added or removed from the entity.
+ *
+ * @param entityId The unique ID of the entity.
+ */
 export const useEntitySockets = (entityId: number) => {
   const ctx = useAnode();
   const store = useMemo(() => {
@@ -113,6 +145,16 @@ export const useEntitySockets = (entityId: number) => {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 };
 
+/**
+ * Subscribes to the reactive value of a specific socket.
+ *
+ * **Cause:** Triggers a re-render only when the value of the socket
+ * changes due to engine propagation.
+ *
+ * @template T The type of the value held by the socket.
+ * @param socketId The unique ID of the socket.
+ * @returns The current socket value, or null if the socket doesn't exist.
+ */
 export function useSocketValue<T = any>(socketId: number | null): T {
   const ctx = useAnode();
   const store = useMemo(() => {
@@ -140,6 +182,10 @@ export function useSocketValue<T = any>(socketId: number | null): T {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 }
 
+/**
+ * Returns an array of all groups currently in the graph.
+ * Reactively updates when groups are created or deleted.
+ */
 export const useGroups = () => {
   const ctx = useAnode();
   const store = useMemo(() => {
@@ -154,7 +200,7 @@ export const useGroups = () => {
         const handles = [
           ctx.registerGroupCreateListener(update),
           ctx.registerGroupDropListener(update),
-          ctx.registerEntityMoveListener(update), // Groups might need re-render on entity move if calculating bounds
+          ctx.registerEntityMoveListener(update), // Groups might need re-render on entity move if calculating dynamic bounds
           ctx.registerBulkChangeListener(update)
         ];
         return () => handles.forEach((h) => ctx.unregisterListener(h));

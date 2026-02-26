@@ -1,13 +1,21 @@
 {
   "name": "@stuly/anode-react",
   "version": "0.1.0",
-  "description": "Anode react wrapper",
+  "description": "First-class React bindings for building interactive, declarative node editors with Anode.",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "publishConfig": {
     "access": "public"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stulyproject/anode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stulyproject/anode/issues"
+  },
+  "homepage": "https://github.com/stulyproject/anode#readme",
   "files": [
     "dist"
   ],
@@ -15,7 +23,13 @@
     "build": "pnpm tsdown",
     "lint": "tsc"
   },
-  "keywords": [],
+  "keywords": [
+    "react",
+    "node-editor",
+    "node-graph",
+    "anode",
+    "declarative"
+  ],
   "author": "",
   "type": "module",
   "license": "MIT",

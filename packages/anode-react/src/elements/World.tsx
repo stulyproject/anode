@@ -7,22 +7,37 @@ import { Group } from './Group.js';
 import { Link, type LinkComponentProps } from './Link.js';
 import { Vec2, LinkKind, Rect, Context } from '@stuly/anode';
 
+/** Represents the minimal data for a node in declarative sync mode. */
 export interface NodeData {
+  /** The unique ID for the node. */
   id: number;
+  /** The absolute world position. */
   position: { x: number; y: number };
+  /** Type key for the `nodeTypes` map. */
   type?: string;
+  /** Custom data stored in `entity.inner`. */
   data?: any;
 }
 
+/** Represents the minimal data for a link in declarative sync mode. */
 export interface LinkData {
+  /** The unique ID for the link. */
   id: number;
+  /** Source entity ID. */
   source: number;
+  /** Name of the source socket. */
   sourceHandle: string;
+  /** Target entity ID. */
   target: number;
+  /** Name of the target socket. */
   targetHandle: string;
+  /** Type key for the `linkTypes` map. */
   type?: string;
+  /** Custom data stored in `link.inner`. */
   data?: any;
+  /** Routing style for the link. */
   kind?: LinkKind;
+  /** Optional custom waypoints. */
   waypoints?: { x: number; y: number }[];
 }
 
@@ -43,18 +58,52 @@ const getCenter = (t1: React.Touch | Touch, t2: React.Touch | Touch) => {
   };
 };
 
+/**
+ * The primary canvas component for Anode.
+ * Handles interaction (zoom, pan, selection) and synchronizes the React component
+ * tree with the internal headless engine.
+ *
+ * **Behaviors:**
+ * 1. **Zoom/Pan:** Implements standard wheel and touch interaction.
+ * 2. **Selection:** Multi-select with Shift + Click, Box select with Alt + Click.
+ * 3. **Declarative Sync:** If `nodes` or `links` are passed, the core engine
+ *    automatically mirrors these arrays. Changes made directly in the UI
+ *    (dragging, deleting) will trigger the corresponding `onNodesChange` callback.
+ * 4. **Spatial Culling:** Automatically uses `useVisibleNodes` to optimize rendering.
+ *
+ * **Usage:**
+ * ```tsx
+ * <World
+ *   nodeTypes={{ math: MathNode }}
+ *   nodes={state.nodes}
+ *   onNodesChange={newNodes => setState({ nodes: newNodes })}
+ * />
+ * ```
+ */
 export const World: React.FC<{
+  /** Elements to overlay on the world (Background, MiniMap, etc.). */
   children?: React.ReactNode;
+  /** Styles applied to the outer container. */
   style?: React.CSSProperties;
+  /** Styles applied to the selection box overlay. */
   selectionBoxStyle?: React.CSSProperties;
+  /** Map of custom node components by their `type` key. */
   nodeTypes?: Record<string, React.ComponentType<NodeComponentProps>>;
+  /** Map of custom link overlays/UI components by their `type` key. */
   linkTypes?: Record<string, React.ComponentType<LinkComponentProps>>;
+  /** Default style for newly created links. */
   defaultLinkKind?: LinkKind;
+  /** Callback triggered when a user completes a connection via drag-and-drop. */
   onConnect?: (fromId: number, toId: number, ctx: Context<any>) => void;
+  /** Custom validation for link creation. Return false to prevent a connection. */
   isValidConnection?: (from: any, to: any, ctx: Context<any>) => boolean;
+  /** Declarative list of nodes. Use for state-controlled synchronization. */
   nodes?: NodeData[];
+  /** Declarative list of links. Use for state-controlled synchronization. */
   links?: LinkData[];
+  /** Callback triggered when nodes are moved or dropped. */
   onNodesChange?: (nodes: NodeData[], ctx: Context<any>) => void;
+  /** Callback triggered when links are updated or deleted. */
   onLinksChange?: (links: LinkData[], ctx: Context<any>) => void;
 }> = ({
   children,
@@ -254,7 +303,6 @@ export const World: React.FC<{
   const transformRef = useRef(transform);
   transformRef.current = transform;
 
-  // Track container size for accurate spatial culling
   useEffect(() => {
     if (!worldRef.current) return;
     const observer = new ResizeObserver((entries) => {
@@ -267,7 +315,6 @@ export const World: React.FC<{
     return () => observer.disconnect();
   }, []);
 
-  // Native wheel listener to allow preventDefault (fixing passive listener error)
   useEffect(() => {
     const el = worldRef.current;
     if (!el) return;
@@ -309,9 +356,7 @@ export const World: React.FC<{
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Deletion
       if (e.key === 'Backspace' || e.key === 'Delete') {
-        // Only delete if not typing in an input
         if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
         ctx.batch(() => {
@@ -327,7 +372,6 @@ export const World: React.FC<{
         setSelection({ nodes: new Set(), links: new Set() });
       }
 
-      // Undo / Redo
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         if (e.shiftKey) ctx.redo();
         else ctx.undo();
@@ -489,9 +533,6 @@ export const World: React.FC<{
           const toId = parseInt(targetSocketEl.getAttribute('data-socket-id') || '');
           const toSocket = ctx.sockets.get(toId);
           if (toSocket) {
-            // Check if we can link from the static end to the new target
-            // If type === 'from', we are moving the 'from' end, so we check if otherSocket (which is 'to') can link with new 'from'
-            // canLink(from, to)
             const newFrom = type === 'from' ? toSocket : otherSocket;
             const newTo = type === 'from' ? otherSocket : toSocket;
             isValid =
@@ -568,7 +609,6 @@ export const World: React.FC<{
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
-
     if (e.target !== worldRef.current) return;
 
     if (e.altKey) {
@@ -605,7 +645,6 @@ export const World: React.FC<{
           const x2 = Math.max(prev.startX, prev.endX);
           const y2 = Math.max(prev.startY, prev.endY);
 
-          // Convert screen box to world box
           const worldTopLeft = screenToWorld(x1 + rect.left, y1 + rect.top);
           const worldBottomRight = screenToWorld(x2 + rect.left, y2 + rect.top);
 

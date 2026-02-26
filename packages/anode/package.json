@@ -4,10 +4,18 @@
   "main": "dist/anode.js",
   "module": "dist/anode.js",
   "types": "dist/anode.d.ts",
-  "description": "A simple node library",
+  "description": "The high-performance, headless core engine for Anode.",
   "publishConfig": {
     "access": "public"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stulyproject/anode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stulyproject/anode/issues"
+  },
+  "homepage": "https://github.com/stulyproject/anode#readme",
   "files": [
     "dist"
   ],
@@ -25,7 +33,13 @@
       "default": "./dist/anode.js"
     }
   },
-  "keywords": [],
+  "keywords": [
+    "node-graph",
+    "graph-engine",
+    "headless",
+    "spatial-indexing",
+    "quadtree"
+  ],
   "author": "",
   "license": "MIT",
   "type": "module",
