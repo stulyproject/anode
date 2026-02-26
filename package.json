@@ -8,7 +8,8 @@
     "test": "pnpm -r run test",
     "format": "prettier --write .",
     "check": "pnpm build && pnpm lint && pnpm test",
-    "all": "pnpm format && pnpm check"
+    "all": "pnpm format && pnpm check",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
