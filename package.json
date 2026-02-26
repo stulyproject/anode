@@ -2,6 +2,14 @@
   "name": "anode-workspace",
   "private": true,
   "packageManager": "pnpm@10.30.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stulyproject/anode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stulyproject/anode/issues"
+  },
+  "homepage": "https://github.com/stulyproject/anode#readme",
   "scripts": {
     "build": "pnpm -r --workspace-concurrency=1 build",
     "lint": "pnpm -r run lint",
