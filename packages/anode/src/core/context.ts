@@ -281,7 +281,7 @@ export class Context<T = any> {
         const from = this.sockets.get(action.from);
         const to = this.sockets.get(action.to);
         if (from && to) {
-          const link = new Link(action.id, from.id, to.id, action.kind);
+          const link = new Link(action.id, from.id, to.id, action.kind, action.inner);
           this.links.set(link.id, link);
           this.lid = Math.max(this.lid, link.id + 1);
           for (const cb of this.linkCreateCallbacks.values()) cb(link);
@@ -795,12 +795,18 @@ export class Context<T = any> {
     }
   }
 
-  newLink(from: Socket, to: Socket, kind: LinkKind = LinkKind.LINE, forcedId?: number) {
+  newLink(
+    from: Socket,
+    to: Socket,
+    kind: LinkKind = LinkKind.LINE,
+    forcedId?: number,
+    inner: any = {}
+  ) {
     if (!this.canLink(from, to)) {
       return null;
     }
     const id = forcedId ?? this.getNextLid();
-    const link = new Link(id, from.id, to.id, kind);
+    const link = new Link(id, from.id, to.id, kind, inner);
     this.links.set(link.id, link);
     if (forcedId !== undefined) {
       this.lid = Math.max(this.lid, forcedId + 1);
@@ -808,8 +814,22 @@ export class Context<T = any> {
 
     if (!this.isApplyingHistory) {
       this.record(
-        { type: 'CREATE_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
-        { type: 'DROP_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
+        {
+          type: 'CREATE_LINK',
+          id: link.id,
+          from: link.from,
+          to: link.to,
+          kind: link.kind,
+          inner: link.inner
+        },
+        {
+          type: 'DROP_LINK',
+          id: link.id,
+          from: link.from,
+          to: link.to,
+          kind: link.kind,
+          inner: link.inner
+        },
         'Create Link'
       );
     }
@@ -969,8 +989,22 @@ export class Context<T = any> {
     if (this.links.delete(link.id)) {
       if (!this.isApplyingHistory) {
         this.record(
-          { type: 'DROP_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
-          { type: 'CREATE_LINK', id: link.id, from: link.from, to: link.to, kind: link.kind },
+          {
+            type: 'DROP_LINK',
+            id: link.id,
+            from: link.from,
+            to: link.to,
+            kind: link.kind,
+            inner: link.inner
+          },
+          {
+            type: 'CREATE_LINK',
+            id: link.id,
+            from: link.from,
+            to: link.to,
+            kind: link.kind,
+            inner: link.inner
+          },
           'Drop Link'
         );
       }
@@ -1004,7 +1038,8 @@ export class Context<T = any> {
         from: l.from,
         to: l.to,
         kind: l.kind,
-        waypoints: l.waypoints.map((p) => ({ x: p.x, y: p.y }))
+        waypoints: l.waypoints.map((p) => ({ x: p.x, y: p.y })),
+        inner: l.inner
       })),
       groups: Array.from(this.groups.values()).map((g) => ({
         id: g.id,
@@ -1050,7 +1085,7 @@ export class Context<T = any> {
     }
 
     for (const lData of data.links) {
-      const link = new Link(lData.id, lData.from, lData.to, lData.kind);
+      const link = new Link(lData.id, lData.from, lData.to, lData.kind, lData.inner);
       if (lData.waypoints) {
         link.waypoints = lData.waypoints.map((p: any) => new Vec2(p.x, p.y));
       }

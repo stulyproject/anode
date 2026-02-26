@@ -22,8 +22,22 @@ export type HistoryAction =
       position: { x: number; y: number };
       parentId: number | null;
     }
-  | { type: 'CREATE_LINK'; id: number; from: number; to: number; kind: LinkKind }
-  | { type: 'DROP_LINK'; id: number; from: number; to: number; kind: LinkKind }
+  | {
+      type: 'CREATE_LINK';
+      id: number;
+      from: number;
+      to: number;
+      kind: LinkKind;
+      inner?: any;
+    }
+  | {
+      type: 'DROP_LINK';
+      id: number;
+      from: number;
+      to: number;
+      kind: LinkKind;
+      inner?: any;
+    }
   | {
       type: 'UPDATE_LINK';
       id: number;

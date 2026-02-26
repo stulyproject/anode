@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useAnode, useSelection, useViewport } from '../context.js';
-import { getLinkPath, getLinkPoints, Vec2 } from 'anode';
+import { getLinkPath, getLinkPoints, getLinkCenter, Vec2, Link as LinkCore } from 'anode';
+
+export interface LinkComponentProps {
+  id: number;
+  link: LinkCore;
+}
 
 export interface LinkProps {
   id: number;
   style?: React.CSSProperties;
+  component?: React.ComponentType<LinkComponentProps> | undefined;
 }
 
-export const Link: React.FC<LinkProps> = ({ id, style }) => {
+export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) => {
   const ctx = useAnode();
   const { viewport, screenToWorld } = useViewport();
   const { selection, setSelection } = useSelection();
@@ -39,6 +45,7 @@ export const Link: React.FC<LinkProps> = ({ id, style }) => {
 
   const d = getLinkPath(ctx, link);
   const pts = getLinkPoints(ctx, link);
+  const center = getLinkCenter(ctx, link);
   if (!d || !pts) return null;
 
   const isSelected = selection.links.has(id);
@@ -108,52 +115,76 @@ export const Link: React.FC<LinkProps> = ({ id, style }) => {
   };
 
   return (
-    <g onClick={onClick} onDoubleClick={onDoubleClick} style={{ cursor: 'pointer' }}>
-      {/* Invisible thicker path for easier clicking */}
-      <path d={d} fill="none" stroke="transparent" strokeWidth={15} />
-      <path
-        d={d}
-        fill="none"
-        stroke={isSelected ? '#3b82f6' : '#94a3b8'}
-        strokeWidth={isSelected ? 3 : 2}
-        style={{ transition: 'stroke 0.2s, stroke-width 0.2s', ...style }}
-      />
+    <>
+      <g onClick={onClick} onDoubleClick={onDoubleClick} style={{ cursor: 'pointer' }}>
+        {/* Invisible thicker path for easier clicking */}
+        <path d={d} fill="none" stroke="transparent" strokeWidth={15} />
+        <path
+          d={d}
+          fill="none"
+          stroke={isSelected ? '#3b82f6' : '#94a3b8'}
+          strokeWidth={isSelected ? 3 : 2}
+          style={{ transition: 'stroke 0.2s, stroke-width 0.2s', ...style }}
+        />
 
-      {isSelected && (
-        <>
-          <circle
-            cx={pts.from.x}
-            cy={pts.from.y}
-            r={5}
-            fill="white"
-            stroke="#3b82f6"
-            strokeWidth={2}
-            onMouseDown={(e) => onHandleMouseDown(e, 'from')}
-            style={{ cursor: 'crosshair', pointerEvents: 'auto' }}
-          />
-          <circle
-            cx={pts.to.x}
-            cy={pts.to.y}
-            r={5}
-            fill="white"
-            stroke="#3b82f6"
-            strokeWidth={2}
-            onMouseDown={(e) => onHandleMouseDown(e, 'to')}
-            style={{ cursor: 'crosshair', pointerEvents: 'auto' }}
-          />
-          {link.waypoints.map((p, i) => (
+        {isSelected && (
+          <>
             <circle
-              key={i}
-              cx={p.x}
-              cy={p.y}
-              r={4}
-              fill="#3b82f6"
-              onMouseDown={(e) => onWaypointMouseDown(e, i)}
-              style={{ cursor: 'move', pointerEvents: 'auto' }}
+              cx={pts.from.x}
+              cy={pts.from.y}
+              r={5}
+              fill="white"
+              stroke="#3b82f6"
+              strokeWidth={2}
+              onMouseDown={(e) => onHandleMouseDown(e, 'from')}
+              style={{ cursor: 'crosshair', pointerEvents: 'auto' }}
             />
-          ))}
-        </>
+            <circle
+              cx={pts.to.x}
+              cy={pts.to.y}
+              r={5}
+              fill="white"
+              stroke="#3b82f6"
+              strokeWidth={2}
+              onMouseDown={(e) => onHandleMouseDown(e, 'to')}
+              style={{ cursor: 'crosshair', pointerEvents: 'auto' }}
+            />
+            {link.waypoints.map((p, i) => (
+              <circle
+                key={i}
+                cx={p.x}
+                cy={p.y}
+                r={4}
+                fill="#3b82f6"
+                onMouseDown={(e) => onWaypointMouseDown(e, i)}
+                style={{ cursor: 'move', pointerEvents: 'auto' }}
+              />
+            ))}
+          </>
+        )}
+      </g>
+      {Component && center && (
+        <foreignObject
+          x={center.x - 50}
+          y={center.y - 25}
+          width={100}
+          height={50}
+          style={{ overflow: 'visible', pointerEvents: 'none' }}
+        >
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto'
+            }}
+          >
+            <Component id={id} link={link} />
+          </div>
+        </foreignObject>
       )}
-    </g>
+    </>
   );
 };

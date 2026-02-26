@@ -2,12 +2,9 @@ import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useAnode, useViewport, useSelection, AnodeReactContext } from '../context.js';
 import { useVisibleNodes, useEdges } from '../hooks.js';
 import { Node } from './Node.js';
-import { Link } from './Link.js';
-import { Vec2, Entity, LinkKind, Rect } from 'anode';
-
-export interface NodeComponentProps {
-  entity: Entity;
-}
+import type { NodeComponentProps } from './Node.js';
+import { Link, type LinkComponentProps } from './Link.js';
+import { Vec2, LinkKind, Rect, Context } from 'anode';
 
 export interface NodeData {
   id: number;
@@ -22,6 +19,8 @@ export interface LinkData {
   sourceHandle: string;
   target: number;
   targetHandle: string;
+  type?: string;
+  data?: any;
   kind?: LinkKind;
   waypoints?: { x: number; y: number }[];
 }
@@ -48,18 +47,20 @@ export const World: React.FC<{
   style?: React.CSSProperties;
   selectionBoxStyle?: React.CSSProperties;
   nodeTypes?: Record<string, React.ComponentType<NodeComponentProps>>;
+  linkTypes?: Record<string, React.ComponentType<LinkComponentProps>>;
   defaultLinkKind?: LinkKind;
-  onConnect?: (fromId: number, toId: number) => void;
-  isValidConnection?: (from: any, to: any) => boolean;
+  onConnect?: (fromId: number, toId: number, ctx: Context<any>) => void;
+  isValidConnection?: (from: any, to: any, ctx: Context<any>) => boolean;
   nodes?: NodeData[];
   links?: LinkData[];
-  onNodesChange?: (nodes: NodeData[]) => void;
-  onLinksChange?: (links: LinkData[]) => void;
+  onNodesChange?: (nodes: NodeData[], ctx: Context<any>) => void;
+  onLinksChange?: (links: LinkData[], ctx: Context<any>) => void;
 }> = ({
   children,
   style,
   nodeTypes = {},
-  defaultLinkKind = LinkKind.SMOOTH_STEP,
+  linkTypes = {},
+  defaultLinkKind = LinkKind.BEZIER,
   onConnect,
   isValidConnection,
   selectionBoxStyle,
@@ -93,7 +94,7 @@ export const World: React.FC<{
 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
-  // --- Declarative Sync Logic ---
+  // Declarative Sync Logic //
 
   // Sync nodes prop to internal state
   useEffect(() => {
@@ -152,7 +153,10 @@ export const World: React.FC<{
 
         // Add links from props
         for (const l of linksProp) {
-          if (!ctx.links.has(l.id)) {
+          const innerData = { ...(l.data || {}), type: l.type };
+          const link = ctx.links.get(l.id);
+
+          if (!link) {
             const fromNode = ctx.entities.get(l.source);
             const toNode = ctx.entities.get(l.target);
             if (fromNode && toNode) {
@@ -164,11 +168,23 @@ export const World: React.FC<{
               );
 
               if (fromSocket && toSocket) {
-                const newLink = ctx.newLink(fromSocket, toSocket, l.kind || defaultLinkKind, l.id);
+                const newLink = ctx.newLink(
+                  fromSocket,
+                  toSocket,
+                  l.kind || defaultLinkKind,
+                  l.id,
+                  innerData
+                );
                 if (newLink && l.waypoints) {
                   newLink.waypoints = l.waypoints.map((p) => new Vec2(p.x, p.y));
                 }
               }
+            }
+          } else {
+            // Update existing link data
+            link.inner = innerData;
+            if (l.waypoints) {
+              link.waypoints = l.waypoints.map((p) => new Vec2(p.x, p.y));
             }
           }
         }
@@ -197,7 +213,7 @@ export const World: React.FC<{
           type: (e.inner as any)?.type,
           data: e.inner
         }));
-        onNodesChange(currentNodes);
+        onNodesChange(currentNodes, ctx);
       }
       if (onLinksChange && linksProp) {
         const currentLinks = Array.from(ctx.links.values()).map((l) => {
@@ -210,10 +226,12 @@ export const World: React.FC<{
             target: toSocket?.entityId || 0,
             targetHandle: toSocket?.name || '',
             kind: l.kind,
+            type: (l.inner as any)?.type,
+            data: l.inner,
             waypoints: l.waypoints.map((p) => ({ x: p.x, y: p.y }))
           };
         });
-        onLinksChange(currentLinks);
+        onLinksChange(currentLinks, ctx);
       }
     };
 
@@ -230,7 +248,7 @@ export const World: React.FC<{
     return () => handles.forEach((h) => ctx.unregisterListener(h));
   }, [ctx, onNodesChange, onLinksChange, nodes, linksProp]);
 
-  // --- End Declarative Sync Logic ---
+  // SYNC END
 
   const transformRef = useRef(transform);
   transformRef.current = transform;
@@ -364,7 +382,8 @@ export const World: React.FC<{
           const from = ctx.sockets.get(socketId);
           const to = ctx.sockets.get(toId);
           if (from && to) {
-            isValid = ctx.canLink(from, to) && (!isValidConnection || isValidConnection(from, to));
+            isValid =
+              ctx.canLink(from, to) && (!isValidConnection || isValidConnection(from, to, ctx));
           }
         }
 
@@ -407,10 +426,10 @@ export const World: React.FC<{
 
           if (from && to) {
             const valid =
-              ctx.canLink(from, to) && (!isValidConnection || isValidConnection(from, to));
+              ctx.canLink(from, to) && (!isValidConnection || isValidConnection(from, to, ctx));
             if (valid) {
               if (onConnect) {
-                onConnect(socketId, toId);
+                onConnect(socketId, toId, ctx);
               } else {
                 ctx.newLink(from, to, defaultLinkKind);
               }
@@ -475,7 +494,7 @@ export const World: React.FC<{
             const newTo = type === 'from' ? otherSocket : toSocket;
             isValid =
               ctx.canLink(newFrom, newTo) &&
-              (!isValidConnection || isValidConnection(newFrom, newTo));
+              (!isValidConnection || isValidConnection(newFrom, newTo, ctx));
           }
         }
 
@@ -521,7 +540,7 @@ export const World: React.FC<{
 
             if (
               ctx.canLink(newFrom, newTo) &&
-              (!isValidConnection || isValidConnection(newFrom, newTo))
+              (!isValidConnection || isValidConnection(newFrom, newTo, ctx))
             ) {
               ctx.updateLink(link, newFrom.id, newTo.id);
             }
@@ -766,9 +785,11 @@ export const World: React.FC<{
           }}
         >
           <g style={{ pointerEvents: 'auto' }}>
-            {links.map((link) => (
-              <Link key={link.id} id={link.id} />
-            ))}
+            {links.map((link) => {
+              const type = link.inner?.type || 'default';
+              const Component = linkTypes[type];
+              return <Link key={link.id} id={link.id} component={Component} />;
+            })}
           </g>
           {pendingLink && (
             <line

@@ -127,18 +127,20 @@ export enum LinkKind {
 }
 
 /** A connection between sockets */
-export class Link {
+export class Link<T = any> {
   #id: number;
   from: number; // Socket ID
   to: number; // Socket ID
   kind: LinkKind;
   waypoints: Vec2[] = [];
+  inner: T;
 
-  constructor(id: number, from: number, to: number, kind = LinkKind.LINE) {
+  constructor(id: number, from: number, to: number, kind = LinkKind.LINE, inner: T = {} as T) {
     this.#id = id;
     this.from = from;
     this.to = to;
     this.kind = kind;
+    this.inner = inner;
   }
 
   get id() {

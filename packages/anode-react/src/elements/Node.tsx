@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAnode, useViewport, useSelection } from '../context.js';
+import { Entity } from 'anode';
 
 export interface NodeProps {
   id: number;
   children?: React.ReactNode;
+}
+
+export interface NodeComponentProps {
+  entity: Entity;
 }
 
 export const Node: React.FC<NodeProps> = ({ id, children }) => {

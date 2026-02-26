@@ -23,6 +23,20 @@ export function getLinkPoints(ctx: Context, link: Link): { from: Vec2; to: Vec2 
   };
 }
 
+export function getLinkCenter(ctx: Context, link: Link): Vec2 | null {
+  const pts = getLinkPoints(ctx, link);
+  if (!pts) return null;
+
+  const points = [pts.from, ...link.waypoints, pts.to];
+  if (points.length < 2) return null;
+
+  const midIndex = Math.floor((points.length - 1) / 2);
+  const p1 = points[midIndex]!;
+  const p2 = points[midIndex + 1]!;
+
+  return new Vec2((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+}
+
 export function getLinkPath(ctx: Context, link: Link): string | null {
   const pts = getLinkPoints(ctx, link);
   if (!pts) return null;

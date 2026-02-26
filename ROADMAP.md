@@ -20,7 +20,7 @@
   - [x] Snap-to-grid while dragging.
   - [x] **Box Selection**: Drag marquee to select multiple elements.
   - [x] **Touch Support**: Pinch-to-zoom and touch dragging.
-  - [ ] **Advanced Link Interaction**:
+  - [x] **Advanced Link Interaction**:
     - _Goal_: Re-connecting links and adding path points.
     - _Why_: Improves UX for complex graphs and allows routing links around nodes.
 - [x] **Components**:
@@ -33,7 +33,7 @@
 - [x] **API**:
   - [x] **Selection API**: Path selection and multi-select.
   - [x] **Validation Hooks**: `isValidConnection` for custom rules.
-  - [ ] **Full Declarative Sync**: One-way/Two-way sync between props and core context.
+  - [x] **Full Declarative Sync**: One-way/Two-way sync between props and core context.
   - [x] Specialized Hooks: `useNodes`, `useEdges`, `useVisibleNodes`.
 - [x] **Aesthetics**:
   - [x] Customizable link paths (Straight, Step, SmoothStep, Bezier).
