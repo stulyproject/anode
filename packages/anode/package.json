@@ -1,5 +1,5 @@
 {
-  "name": "anode",
+  "name": "@stuly/anode",
   "version": "0.0.1",
   "main": "dist/anode.js",
   "module": "dist/anode.js",

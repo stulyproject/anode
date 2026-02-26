@@ -6,7 +6,7 @@ the headless core engine.
 ## Installation
 
 ```bash
-npm install anode-react anode
+npm install @stuly/anode-react @stuly/anode
 ```
 
 ## Components & Hooks

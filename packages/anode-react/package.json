@@ -1,5 +1,5 @@
 {
-  "name": "anode-react",
+  "name": "@stuly/anode-react",
   "version": "0.0.1",
   "description": "Anode react wrapper",
   "main": "dist/index.js",

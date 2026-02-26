@@ -6,7 +6,7 @@ spatial indexing, and history independently of any UI framework.
 ## Installation
 
 ```bash
-npm install anode
+npm install @stuly/anode
 ```
 
 ## Features
