@@ -17,7 +17,7 @@ describe('History (Undo/Redo)', () => {
 
     ctx.redo();
     expect(ctx.entities.size).toBe(1);
-    expect(ctx.entities.values().next().value.inner.label).toBe('A');
+    expect(ctx.entities.values().next().value!.inner.label).toBe('A');
   });
 
   it('should undo and redo entity deletion with links', () => {

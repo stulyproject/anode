@@ -1,6 +1,6 @@
 import { Entity, Link, LinkKind, Socket, SocketKind, Vec2, Group } from './elements';
 import { QuadTree, Rect } from './layout';
-import { HistoryManager, HistoryAction, Command } from './history';
+import { HistoryManager, type HistoryAction, type Command } from './history';
 
 export type EntityCallback<T> = (entity: Entity<T>) => void;
 export type LinkCallback = (link: Link) => void;
@@ -38,6 +38,7 @@ export class Context<T = any> {
 
   private groupCreateCallbacks: Map<number, GroupCallback> = new Map();
   private groupDropCallbacks: Map<number, GroupCallback> = new Map();
+  private bulkChangeCallbacks: Map<number, () => void> = new Map();
 
   entities: Map<number, Entity<T>> = new Map();
   links: Map<number, Link> = new Map();
@@ -65,6 +66,35 @@ export class Context<T = any> {
   }
   private getNextCallbackHandle(): CallbackHandle {
     return this.freeCallbackIds.pop() ?? this.callbackIds++;
+  }
+
+  private setupEntity(entity: Entity<T>) {
+    entity.onMove((pos) => {
+      this.updateQuadTree();
+      for (const cb of this.entityMoveCallbacks.values()) {
+        try {
+          cb(entity, this.getWorldPosition(entity.id));
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  }
+
+  notifyBulkChange() {
+    for (const cb of this.bulkChangeCallbacks.values()) {
+      try {
+        cb();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+
+  registerBulkChangeListener(cb: () => void): CallbackHandle {
+    const handle = this.getNextCallbackHandle();
+    this.bulkChangeCallbacks.set(handle, cb);
+    return handle;
   }
 
   setSocketValue(socketId: number, value: any) {
@@ -113,7 +143,7 @@ export class Context<T = any> {
     this.history.push({
       do: das,
       undo: uas,
-      label,
+      label: label ?? 'Action',
       timestamp: Date.now()
     });
   }
@@ -139,9 +169,9 @@ export class Context<T = any> {
       const afterState = this.toJSON();
 
       this.history.push({
-        do: [{ type: 'FROM_JSON', data: afterState } as any],
-        undo: [{ type: 'FROM_JSON', data: beforeState } as any],
-        label,
+        do: [{ type: 'FROM_JSON', data: afterState }],
+        undo: [{ type: 'FROM_JSON', data: beforeState }],
+        label: label ?? 'Batch Action',
         timestamp: Date.now()
       });
     } finally {
@@ -153,13 +183,18 @@ export class Context<T = any> {
     const cmd = this.history.undoStack.pop();
     if (!cmd) return;
     this.isApplyingHistory = true;
+    this.isBatchingQuadTree = true;
     try {
       for (let i = cmd.undo.length - 1; i >= 0; i--) {
-        this.applyAction(cmd.undo[i]);
+        this.applyAction(cmd.undo[i]!);
       }
+      this.isBatchingQuadTree = false;
+      this.updateQuadTree();
+      this.notifyBulkChange();
       this.history.redoStack.push(cmd);
     } finally {
       this.isApplyingHistory = false;
+      this.isBatchingQuadTree = false;
     }
   }
 
@@ -167,20 +202,25 @@ export class Context<T = any> {
     const cmd = this.history.redoStack.pop();
     if (!cmd) return;
     this.isApplyingHistory = true;
+    this.isBatchingQuadTree = true;
     try {
       for (const action of cmd.do) {
         this.applyAction(action);
       }
+      this.isBatchingQuadTree = false;
+      this.updateQuadTree();
+      this.notifyBulkChange();
       this.history.undoStack.push(cmd);
     } finally {
       this.isApplyingHistory = false;
+      this.isBatchingQuadTree = false;
     }
   }
 
   private applyAction(action: HistoryAction) {
-    switch (action.type as any) {
+    switch (action.type) {
       case 'FROM_JSON': {
-        this.fromJSON((action as any).data);
+        this.fromJSON(action.data);
         break;
       }
       case 'MOVE_ENTITY': {
@@ -214,16 +254,7 @@ export class Context<T = any> {
         this.entities.set(entity.id, entity);
         this.eid = Math.max(this.eid, entity.id + 1);
 
-        entity.onMove((pos) => {
-          this.updateQuadTree();
-          for (const cb of this.entityMoveCallbacks.values()) {
-            try {
-              cb(entity, this.getWorldPosition(entity.id));
-            } catch (err) {
-              console.error(err);
-            }
-          }
-        });
+        this.setupEntity(entity);
 
         if (action.parentId !== null) {
           this.addToGroup(action.parentId, entity.id);
@@ -386,7 +417,8 @@ export class Context<T = any> {
       this.socketDropCallbacks.delete(handle) ||
       this.socketMoveCallbacks.delete(handle) ||
       this.groupCreateCallbacks.delete(handle) ||
-      this.groupDropCallbacks.delete(handle);
+      this.groupDropCallbacks.delete(handle) ||
+      this.bulkChangeCallbacks.delete(handle);
 
     if (deleted) {
       this.freeCallbackIds.push(handle);
@@ -573,17 +605,7 @@ export class Context<T = any> {
     const ett = new Entity(this.getNextEid(), inner);
     this.entities.set(ett.id, ett);
 
-    // Register move listener automatically to bridge to context listeners
-    ett.onMove((pos) => {
-      this.updateQuadTree();
-      for (const cb of this.entityMoveCallbacks.values()) {
-        try {
-          cb(ett, this.getWorldPosition(ett.id));
-        } catch (err) {
-          console.error(err);
-        }
-      }
-    });
+    this.setupEntity(ett);
 
     if (!this.isApplyingHistory) {
       this.record(
@@ -898,6 +920,8 @@ export class Context<T = any> {
       entity.parentId = eData.parentId;
       this.entities.set(entity.id, entity);
       this.eid = Math.max(this.eid, entity.id + 1);
+
+      this.setupEntity(entity);
 
       for (const sData of eData.sockets) {
         const socket = new Socket(sData.id, entity.id, sData.kind, sData.name);

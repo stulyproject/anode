@@ -41,7 +41,8 @@ export type HistoryAction =
       kind: SocketKind;
       name: string;
       offset: { x: number; y: number };
-    };
+    }
+  | { type: 'FROM_JSON'; data: any };
 
 export interface Command {
   do: HistoryAction[];

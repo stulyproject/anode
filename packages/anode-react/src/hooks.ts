@@ -17,7 +17,8 @@ export const useNodes = () => {
         const handles = [
           ctx.registerEntityCreateListener(update),
           ctx.registerEntityDropListener(update),
-          ctx.registerEntityMoveListener(update) // Trigger on move
+          ctx.registerEntityMoveListener(update),
+          ctx.registerBulkChangeListener(update)
         ];
         return () => handles.forEach((h) => ctx.unregisterListener(h));
       },
@@ -62,7 +63,8 @@ export const useEdges = () => {
         const handles = [
           ctx.registerLinkCreateListener(update),
           ctx.registerLinkDropListener(update),
-          ctx.registerEntityMoveListener(update) // Links need re-render on entity move
+          ctx.registerEntityMoveListener(update), // Links need re-render on entity move
+          ctx.registerBulkChangeListener(update)
         ];
         return () => handles.forEach((h) => ctx.unregisterListener(h));
       },
@@ -96,10 +98,12 @@ export const useEntitySockets = (entityId: number) => {
         const h3 = ctx.registerSocketMoveListener((s) => {
           if (s.entityId === entityId) update();
         });
+        const h4 = ctx.registerBulkChangeListener(update);
         return () => {
           ctx.unregisterListener(h1);
           ctx.unregisterListener(h2);
           ctx.unregisterListener(h3);
+          ctx.unregisterListener(h4);
         };
       },
       getSnapshot: () => snapshot
@@ -120,7 +124,11 @@ export function useSocketValue<T = any>(socketId: number | null): T {
             onStoreChange();
           }
         });
-        return () => ctx.unregisterListener(handle);
+        const bulkHandle = ctx.registerBulkChangeListener(onStoreChange);
+        return () => {
+          ctx.unregisterListener(handle);
+          ctx.unregisterListener(bulkHandle);
+        };
       },
       getSnapshot: () => {
         if (socketId === null) return null;

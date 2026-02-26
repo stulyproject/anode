@@ -86,10 +86,10 @@ export class QuadTree<T> {
   private points: { pos: Vec2; data: T }[] = [];
   private divided: boolean = false;
 
-  private northwest?: QuadTree<T>;
-  private northeast?: QuadTree<T>;
-  private southwest?: QuadTree<T>;
-  private southeast?: QuadTree<T>;
+  private northwest: QuadTree<T> | null = null;
+  private northeast: QuadTree<T> | null = null;
+  private southwest: QuadTree<T> | null = null;
+  private southeast: QuadTree<T> | null = null;
 
   constructor(public boundary: Rect) {}
 
@@ -154,9 +154,9 @@ export class QuadTree<T> {
   clear() {
     this.points = [];
     this.divided = false;
-    this.northwest = undefined;
-    this.northeast = undefined;
-    this.southwest = undefined;
-    this.southeast = undefined;
+    this.northwest = null;
+    this.northeast = null;
+    this.southwest = null;
+    this.southeast = null;
   }
 }

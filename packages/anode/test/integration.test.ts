@@ -71,7 +71,8 @@ describe('Anode Integration', () => {
       expect(movedIds).toContain(nodeB.id);
 
       // Check absolute positions in the callback
-      expect(calls.find((c) => c[0].id === nodeA.id)[1]).toMatchObject({ x: 50, y: 50 });
+      const callA = calls.find((c) => c[0].id === nodeA.id);
+      expect(callA![1]).toMatchObject({ x: 50, y: 50 });
     });
   });
 });

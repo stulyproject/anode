@@ -12,7 +12,8 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "tsc"
   },
   "exports": {
     ".": {

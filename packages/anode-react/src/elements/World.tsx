@@ -3,7 +3,7 @@ import { useAnode, useViewport, useSelection, AnodeReactContext } from '../conte
 import { useVisibleNodes, useEdges } from '../hooks.js';
 import { Node } from './Node.js';
 import { Link } from './Link.js';
-import { Vec2, Entity, LinkKind } from 'anode';
+import { Vec2, Entity, LinkKind, Rect } from 'anode';
 
 export interface NodeComponentProps {
   entity: Entity;
@@ -29,6 +29,7 @@ const getCenter = (t1: React.Touch | Touch, t2: React.Touch | Touch) => {
 export const World: React.FC<{
   children?: React.ReactNode;
   style?: React.CSSProperties;
+  selectionBoxStyle?: React.CSSProperties;
   nodeTypes?: Record<string, React.ComponentType<NodeComponentProps>>;
   defaultLinkKind?: LinkKind;
   onConnect?: (fromId: number, toId: number) => void;
@@ -39,13 +40,20 @@ export const World: React.FC<{
   nodeTypes = {},
   defaultLinkKind = LinkKind.SMOOTH_STEP,
   onConnect,
-  isValidConnection
+  isValidConnection,
+  selectionBoxStyle
 }) => {
   const ctx = useAnode();
-  const { viewport: transform, setViewport: setTransform } = useViewport();
+  const { viewport: transform, setViewport: setTransform, screenToWorld } = useViewport();
   const { setScreenToWorld } = useContext(AnodeReactContext)!;
   const { selection, setSelection } = useSelection();
   const worldRef = useRef<HTMLDivElement>(null);
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  } | null>(null);
 
   useEffect(() => {
     setScreenToWorld(() => (clientX: number, clientY: number) => {
@@ -256,11 +264,66 @@ export const World: React.FC<{
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
 
-    if (e.target === worldRef.current) {
-      setSelection({ nodes: new Set(), links: new Set() });
-    } else {
+    if (e.target !== worldRef.current) return;
+
+    if (e.altKey) {
+      const rect = worldRef.current.getBoundingClientRect();
+      const startX = e.clientX - rect.left;
+      const startY = e.clientY - rect.top;
+
+      setSelectionBox({ startX, startY, endX: startX, endY: startY });
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        setSelectionBox((prev) =>
+          prev
+            ? {
+                ...prev,
+                endX: moveEvent.clientX - rect.left,
+                endY: moveEvent.clientY - rect.top
+              }
+            : null
+        );
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        setSelectionBox((prev) => {
+          if (!prev) return null;
+
+          const rect = worldRef.current?.getBoundingClientRect();
+          if (!rect) return null;
+
+          const x1 = Math.min(prev.startX, prev.endX);
+          const y1 = Math.min(prev.startY, prev.endY);
+          const x2 = Math.max(prev.startX, prev.endX);
+          const y2 = Math.max(prev.startY, prev.endY);
+
+          // Convert screen box to world box
+          const worldTopLeft = screenToWorld(x1 + rect.left, y1 + rect.top);
+          const worldBottomRight = screenToWorld(x2 + rect.left, y2 + rect.top);
+
+          const queryRect = new Rect(
+            worldTopLeft.x,
+            worldTopLeft.y,
+            worldBottomRight.x - worldTopLeft.x,
+            worldBottomRight.y - worldTopLeft.y
+          );
+
+          const selectedIds = ctx.quadTree.query(queryRect);
+          setSelection({ nodes: new Set(selectedIds), links: new Set() });
+
+          return null;
+        });
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
       return;
     }
+
+    setSelection({ nodes: new Set(), links: new Set() });
 
     const startX = e.clientX - transform.x;
     const startY = e.clientY - transform.y;
@@ -372,6 +435,23 @@ export const World: React.FC<{
       }}
     >
       {children}
+
+      {selectionBox && (
+        <div
+          style={{
+            position: 'absolute',
+            left: Math.min(selectionBox.startX, selectionBox.endX),
+            top: Math.min(selectionBox.startY, selectionBox.endY),
+            width: Math.abs(selectionBox.endX - selectionBox.startX),
+            height: Math.abs(selectionBox.endY - selectionBox.startY),
+            border: '1px solid #3b82f6',
+            background: 'rgba(59, 130, 246, 0.1)',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            ...selectionBoxStyle
+          }}
+        />
+      )}
 
       <div
         style={{
