@@ -1,5 +1,14 @@
 # @stuly/anode
 
+## 0.1.1
+
+### Patch Changes
+
+- ef2096a: docs: Enhanced library documentation
+  - including comprehensive TSDoc for all core engine methods, elements, and React hooks.
+  - simplified package READMEs with quick-start examples and added missing repository
+    metadata to package.json.
+
 ## 0.1.0
 
 ### Minor Changes
