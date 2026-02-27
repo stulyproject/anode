@@ -616,37 +616,30 @@ export const World: React.FC<{
       const startX = e.clientX - rect.left;
       const startY = e.clientY - rect.top;
 
+      let currentX = startX;
+      let currentY = startY;
+
       setSelectionBox({ startX, startY, endX: startX, endY: startY });
 
       const onMouseMove = (moveEvent: MouseEvent) => {
-        setSelectionBox((prev) =>
-          prev
-            ? {
-                ...prev,
-                endX: moveEvent.clientX - rect.left,
-                endY: moveEvent.clientY - rect.top
-              }
-            : null
-        );
+        currentX = moveEvent.clientX - rect.left;
+        currentY = moveEvent.clientY - rect.top;
+        setSelectionBox({ startX, startY, endX: currentX, endY: currentY });
       };
 
       const onMouseUp = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
 
-        setSelectionBox((prev) => {
-          if (!prev) return null;
+        const x1 = Math.min(startX, currentX);
+        const y1 = Math.min(startY, currentY);
+        const x2 = Math.max(startX, currentX);
+        const y2 = Math.max(startY, currentY);
 
-          const rect = worldRef.current?.getBoundingClientRect();
-          if (!rect) return null;
-
-          const x1 = Math.min(prev.startX, prev.endX);
-          const y1 = Math.min(prev.startY, prev.endY);
-          const x2 = Math.max(prev.startX, prev.endX);
-          const y2 = Math.max(prev.startY, prev.endY);
-
-          const worldTopLeft = screenToWorld(x1 + rect.left, y1 + rect.top);
-          const worldBottomRight = screenToWorld(x2 + rect.left, y2 + rect.top);
+        const worldRect = worldRef.current?.getBoundingClientRect();
+        if (worldRect) {
+          const worldTopLeft = screenToWorld(x1 + worldRect.left, y1 + worldRect.top);
+          const worldBottomRight = screenToWorld(x2 + worldRect.left, y2 + worldRect.top);
 
           const queryRect = new Rect(
             worldTopLeft.x,
@@ -657,9 +650,9 @@ export const World: React.FC<{
 
           const selectedIds = ctx.quadTree.query(queryRect);
           setSelection({ nodes: new Set(selectedIds), links: new Set() });
+        }
 
-          return null;
-        });
+        setSelectionBox(null);
       };
 
       document.addEventListener('mousemove', onMouseMove);
