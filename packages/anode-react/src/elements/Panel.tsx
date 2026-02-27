@@ -2,6 +2,19 @@ import React from 'react';
 
 export type PanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+/**
+ * A helper component to overlay custom UI elements (like toolbars or sidebars)
+ * at specific anchor points on the canvas.
+ *
+ * **Usage:**
+ * ```tsx
+ * <World>
+ *   <Panel position="top-right">
+ *     <button>Custom Action</button>
+ *   </Panel>
+ * </World>
+ * ```
+ */
 export const Panel: React.FC<{
   position?: PanelPosition;
   children?: React.ReactNode;

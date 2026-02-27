@@ -64,12 +64,16 @@ const getCenter = (t1: React.Touch | Touch, t2: React.Touch | Touch) => {
  * tree with the internal headless engine.
  *
  * **Behaviors:**
- * 1. **Zoom/Pan:** Implements standard wheel and touch interaction.
- * 2. **Selection:** Multi-select with Shift + Click, Box select with Alt + Click.
- * 3. **Declarative Sync:** If `nodes` or `links` are passed, the core engine
+ * 1. **Zoom/Pan:** Standard wheel zoom and drag-to-pan interaction.
+ * 2. **Selection:** Multi-select with `Shift + Click`, Box select with `Alt + Click`.
+ * 3. **Keybindings:**
+ *    - `Backspace` / `Delete`: Remove selected nodes and links.
+ *    - `Ctrl + Z` / `Cmd + Z`: Undo the last action.
+ *    - `Ctrl + Shift + Z` / `Ctrl + Y`: Redo the last undone action.
+ * 4. **Declarative Sync:** If `nodes` or `links` are passed, the core engine
  *    automatically mirrors these arrays. Changes made directly in the UI
  *    (dragging, deleting) will trigger the corresponding `onNodesChange` callback.
- * 4. **Spatial Culling:** Automatically uses `useVisibleNodes` to optimize rendering.
+ * 5. **Spatial Culling:** Automatically uses `useVisibleNodes` to optimize rendering.
  *
  * **Usage:**
  * ```tsx

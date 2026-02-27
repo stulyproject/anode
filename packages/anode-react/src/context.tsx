@@ -22,8 +22,17 @@ interface AnodeContextValue {
   setSelection: React.Dispatch<React.SetStateAction<{ nodes: Set<number>; links: Set<number> }>>;
 }
 
+/**
+ * Internal context for Anode's React state, including the engine instance,
+ * viewport transformation, and selection state.
+ */
 export const AnodeReactContext = createContext<AnodeContextValue | null>(null);
 
+/**
+ * Accesses the underlying headless Anode engine instance.
+ *
+ * @returns The `Context` instance for direct graph manipulation.
+ */
 export const useAnode = () => {
   const value = useContext(AnodeReactContext);
   if (!value) {
@@ -32,6 +41,12 @@ export const useAnode = () => {
   return value.ctx;
 };
 
+/**
+ * Accesses the current viewport transformation (pan/zoom) and coordinate
+ * conversion utilities.
+ *
+ * @returns An object containing the current `viewport` and functions to update it.
+ */
 export const useViewport = () => {
   const value = useContext(AnodeReactContext);
   if (!value) {
@@ -44,6 +59,11 @@ export const useViewport = () => {
   };
 };
 
+/**
+ * Accesses the current selection state for nodes and links.
+ *
+ * @returns An object containing the `selection` sets and a `setSelection` updater.
+ */
 export const useSelection = () => {
   const value = useContext(AnodeReactContext);
   if (!value) {
@@ -52,6 +72,20 @@ export const useSelection = () => {
   return { selection: value.selection, setSelection: value.setSelection };
 };
 
+/**
+ * The root provider for any Anode React application.
+ * Wraps the internal headless engine and provides reactive state for
+ * viewport and selection.
+ *
+ * **Usage:**
+ * ```tsx
+ * <AnodeProvider>
+ *   <World>
+ *     <Background />
+ *   </World>
+ * </AnodeProvider>
+ * ```
+ */
 export const AnodeProvider: React.FC<{ children: React.ReactNode; context?: Context }> = ({
   children,
   context

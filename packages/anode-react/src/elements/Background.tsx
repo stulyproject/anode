@@ -8,6 +8,17 @@ export interface BackgroundProps {
   pattern?: 'dots' | 'lines';
 }
 
+/**
+ * A decorative grid or dot pattern overlay for the canvas.
+ * Automatically pans and scales with the viewport.
+ *
+ * **Usage:**
+ * ```tsx
+ * <World>
+ *   <Background pattern="dots" color="#ccc" />
+ * </World>
+ * ```
+ */
 export const Background: React.FC<BackgroundProps> = ({
   color = '#cbd5e1',
   size = 1,

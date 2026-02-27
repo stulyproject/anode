@@ -1,6 +1,17 @@
 import React from 'react';
 import { useViewport, useAnode } from '../context.js';
 
+/**
+ * A floating UI control panel providing standard canvas interactions
+ * like zooming in/out and fitting all nodes into the current view.
+ *
+ * **Usage:**
+ * ```tsx
+ * <World>
+ *   <Controls />
+ * </World>
+ * ```
+ */
 export const Controls: React.FC<{
   style?: React.CSSProperties;
 }> = ({ style }) => {

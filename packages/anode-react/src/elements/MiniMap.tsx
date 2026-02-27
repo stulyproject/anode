@@ -1,6 +1,17 @@
 import React, { useMemo } from 'react';
 import { useAnode, useViewport } from '../context.js';
 
+/**
+ * A simplified bird's-eye view of the entire graph, providing
+ * context and a visual indicator of the current viewport.
+ *
+ * **Usage:**
+ * ```tsx
+ * <World>
+ *   <MiniMap width={200} height={150} />
+ * </World>
+ * ```
+ */
 export const MiniMap: React.FC<{
   width?: number;
   height?: number;
