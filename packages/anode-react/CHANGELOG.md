@@ -1,5 +1,13 @@
 # @stuly/anode-react
 
+## 0.1.2
+
+### Patch Changes
+
+- f244767: fix: avoid `setState` during state update in `World` selection
+  docs: improved docs
+  - @stuly/anode@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes
