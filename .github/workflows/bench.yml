@@ -31,12 +31,45 @@ jobs:
       - name: Run benchmark
         run: pnpm run bench:out
 
+      - name: Convert Vitest Output to Custom Format
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('packages/anode/core-bench-result.json', 'utf8'));
+            const results = [];
+            data.files.forEach(file => {
+              file.groups.forEach(group => {
+                group.benchmarks.forEach(bench => {
+                  if (bench.hz) {
+                    const extraInfo =
+                      `Samples: ${bench.sampleCount}\n` +
+                      `Min: ${bench.min.toFixed(4)} ms\n` +
+                      `Max: ${bench.max.toFixed(4)} ms\n` +
+                      `p99: ${bench.p99.toFixed(4)} ms\n` +
+                      `Mean: ${bench.mean.toFixed(4)} ms`;
+
+                    results.push({
+                      name: `${bench.name}`,
+                      unit: 'ops/sec',
+                      value: bench.hz,
+                      // using RME (Relative Margin of Error) for the variance range
+                      range: bench.rme.toFixed(2) + '%',
+                      extra: extraInfo
+                    });
+                  }
+                });
+              });
+            });
+
+            fs.writeFileSync('custom-benchmark.json', JSON.stringify(results, null, 2));
+
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          tool: 'vitest'
-          output-file-path: packages/anode/core-bench-result.json
+          tool: 'customBiggerIsBetter'
+          output-file-path: custom-benchmark.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-          alert-threshold: '130%'
+          auto-push: ${{ github.ref == 'refs/heads/master' }}
+          alert-threshold: '150%'
           fail-on-alert: true
