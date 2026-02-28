@@ -29,6 +29,7 @@ export class Vec2 {
 export enum SocketKind {
   /** Accepts incoming data flow from a link. */
   INPUT = 'INPUT',
+
   /** Emits outgoing data flow into a link. */
   OUTPUT = 'OUTPUT'
 }
@@ -39,14 +40,19 @@ export enum SocketKind {
  */
 export class Socket {
   #id: number;
+
   /** The ID of the entity this socket belongs to. */
   entityId: number;
+
   /** Whether this socket is an INPUT or OUTPUT. */
   kind: SocketKind;
+
   /** A unique name for the socket within the entity (e.g., 'exec', 'value'). */
   name: string;
+
   /** The relative offset of the socket center from the entity's position center. */
   offset: Vec2 = new Vec2();
+
   /** The current value held by this socket, used for reactive data flow. */
   value: any = null;
 
@@ -72,12 +78,15 @@ export class Socket {
 export class Entity<T = any> {
   /** Custom data associated with the node. */
   inner: T;
+
   /** The local position of the entity (relative to its parent group if applicable). */
   position: Vec2 = new Vec2();
+
   /** Collection of sockets attached to this entity. */
   sockets: Map<number, Socket> = new Map();
   #id: number;
   #onMove: ((pos: Vec2) => void)[] = [];
+
   /** The ID of the parent group, or null if it's at the root. */
   parentId: number | null = null;
 
@@ -125,14 +134,19 @@ export class Entity<T = any> {
  */
 export class Group {
   #id: number;
+
   /** Human-readable label for the group. */
   name: string;
+
   /** Set of entity IDs currently inside this group. */
   entities: Set<number> = new Set();
+
   /** Set of nested group IDs currently inside this group. */
   groups: Set<number> = new Set();
+
   /** The local position of the group (relative to its parent group if applicable). */
   position: Vec2 = new Vec2();
+
   /** The ID of the parent group, or null if it's at the root. */
   parentId: number | null = null;
 
@@ -171,12 +185,48 @@ export class Group {
 export enum LinkKind {
   /** Straight line between sockets. */
   LINE = 'LINE',
+
   /** Orthogonal steps with sharp corners. */
   STEP = 'STEP',
+
   /** Orthogonal steps with rounded corners. */
   SMOOTH_STEP = 'SMOOTH_STEP',
+
   /** Smooth cubic bezier curve. */
   BEZIER = 'BEZIER'
+}
+
+/** Visual stroke style for a link. */
+export enum LinkStyle {
+  /** Continuous line. */
+  SOLID = 'SOLID',
+
+  /** Dashed line. */
+  DASHED = 'DASHED',
+
+  /** Dotted line. */
+  DOTTED = 'DOTTED'
+}
+
+/** Configuration for link aesthetics and animations. */
+export interface LinkStyling {
+  /** The stroke pattern (solid, dashed, dotted). */
+  style?: LinkStyle;
+
+  /** CSS color for the link line. */
+  color?: string;
+
+  /** Stroke width in pixels. */
+  width?: number;
+
+  /** Whether to animate a "flowing" effect along the path. */
+  flowing?: boolean;
+
+  /** Speed of the flow animation (positive for forward, negative for reverse). */
+  flowSpeed?: number;
+
+  /** CSS color for the link when selected. */
+  selectionColor?: string;
 }
 
 /**
@@ -186,14 +236,26 @@ export enum LinkKind {
  */
 export class Link<T = any> {
   #id: number;
+
   /** Source Socket ID. Must be an OUTPUT. */
   from: number;
+
   /** Target Socket ID. Must be an INPUT. */
   to: number;
-  /** Visual style for the link. */
+
+  /** Visual routing style for the link. */
   kind: LinkKind;
+
+  /** Aesthetic styling and animations. */
+  styling: LinkStyling = {
+    style: LinkStyle.SOLID,
+    flowing: false,
+    flowSpeed: 1
+  };
+
   /** Custom intermediate points for routing the link path. */
   waypoints: Vec2[] = [];
+
   /** Optional custom data for the link (e.g., labels, types). */
   inner: T;
 

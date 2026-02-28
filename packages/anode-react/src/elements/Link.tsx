@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useAnode, useSelection, useViewport } from '../context.js';
-import { getLinkPath, getLinkPoints, getLinkCenter, Vec2, Link as LinkCore } from '@stuly/anode';
+import {
+  getLinkPath,
+  getLinkPoints,
+  getLinkCenter,
+  Vec2,
+  Link as LinkCore,
+  LinkStyle
+} from '@stuly/anode';
 
 export interface LinkComponentProps {
   id: number;
@@ -9,11 +16,15 @@ export interface LinkComponentProps {
 
 export interface LinkProps {
   id: number;
-  style?: React.CSSProperties;
   component?: React.ComponentType<LinkComponentProps> | undefined;
 }
 
-export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) => {
+/**
+ * Visual representation of a connection between sockets.
+ * Supports custom routing, waypoints, and interactive reconnection.
+ * Now includes aesthetic styling (dashed, dotted) and flowing animations.
+ */
+export const Link: React.FC<LinkProps> = ({ id, component: Component }) => {
   const ctx = useAnode();
   const { viewport, screenToWorld } = useViewport();
   const { selection, setSelection } = useSelection();
@@ -25,7 +36,7 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
 
     const onUpdate = () => setTick((t) => t + 1);
 
-    // Subscribe to everything that affects the path
+    // Subscribe to everything that affects the path or style
     const h1 = ctx.registerEntityMoveListener(onUpdate);
     const h2 = ctx.registerSocketMoveListener(onUpdate);
     const h3 = ctx.registerSocketCreateListener(onUpdate);
@@ -49,6 +60,23 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
   if (!d || !pts) return null;
 
   const isSelected = selection.links.has(id);
+  const { styling } = link;
+
+  const strokeColor = isSelected ? styling.selectionColor || '#3b82f6' : styling.color || '#94a3b8';
+  const strokeWidth = isSelected ? (styling.width || 2) + 1 : styling.width || 2;
+
+  let strokeDasharray: string | undefined = undefined;
+  if (styling.style === LinkStyle.DASHED) strokeDasharray = '10,5';
+  else if (styling.style === LinkStyle.DOTTED) strokeDasharray = '2,4';
+
+  // If flowing, we need a dasharray if it's solid
+  if (styling.flowing && !strokeDasharray) {
+    strokeDasharray = '10,10';
+  }
+
+  const animationName = styling.flowing ? 'anode-flow' : 'none';
+  const animationDuration = `${1 / Math.abs(styling.flowSpeed || 1)}s`;
+  const animationDirection = (styling.flowSpeed || 1) < 0 ? 'reverse' : 'normal';
 
   const onClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -62,13 +90,6 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
     } else {
       setSelection({ nodes: new Set(), links: new Set([id]) });
     }
-  };
-
-  const onDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const { x, y } = screenToWorld(e.clientX, e.clientY);
-    const newWaypoints = [...link.waypoints, new Vec2(x, y)];
-    ctx.setLinkWaypoints(link, newWaypoints);
   };
 
   const onHandleMouseDown = (e: React.MouseEvent, type: 'from' | 'to') => {
@@ -97,8 +118,6 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
         return p;
       });
 
-      // Update without recording history for every mouse move to avoid flooding
-      // We should probably batch this or only record on up.
       link.waypoints = updatedWaypoints;
       setTick((t) => t + 1);
     };
@@ -106,7 +125,6 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
     const onMouseUp = () => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
-      // Final update with history recording
       ctx.setLinkWaypoints(link, link.waypoints);
     };
 
@@ -114,17 +132,36 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
     document.addEventListener('mouseup', onMouseUp);
   };
 
+  const onDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const { x, y } = screenToWorld(e.clientX, e.clientY);
+    const newWaypoints = [...link.waypoints, new Vec2(x, y)];
+    ctx.setLinkWaypoints(link, newWaypoints);
+  };
+
   return (
     <>
+      <style>
+        {`
+          @keyframes anode-flow {
+            from { stroke-dashoffset: 10; }
+            to { stroke-dashoffset: -20; }
+          }
+        `}
+      </style>
       <g onClick={onClick} onDoubleClick={onDoubleClick} style={{ cursor: 'pointer' }}>
         {/* Invisible thicker path for easier clicking */}
         <path d={d} fill="none" stroke="transparent" strokeWidth={15} />
         <path
           d={d}
           fill="none"
-          stroke={isSelected ? '#3b82f6' : '#94a3b8'}
-          strokeWidth={isSelected ? 3 : 2}
-          style={{ transition: 'stroke 0.2s, stroke-width 0.2s', ...style }}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+          strokeDasharray={strokeDasharray}
+          style={{
+            animation: `${animationName} ${animationDuration} linear infinite`,
+            animationDirection: animationDirection as any
+          }}
         />
 
         {isSelected && (
@@ -165,7 +202,7 @@ export const Link: React.FC<LinkProps> = ({ id, style, component: Component }) =
                 }}
                 style={{ cursor: 'move', pointerEvents: 'auto' }}
               />
-            ))}{' '}
+            ))}
           </>
         )}
       </g>
