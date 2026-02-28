@@ -1,4 +1,12 @@
-# Anode
+<div align="center">
+
+  <picture>
+    <img alt="CodSpeed logo" src="./assets/anode.svg" width="350px">
+  </picture>
+
+</div>
+
+<h3 align="center">Graph node library made simple</h3>
 
 Anode is a high-performance node-graph engine built with a focus on architectural
 flexibility and spatial efficiency. While it provides first-class React bindings,
