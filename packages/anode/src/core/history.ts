@@ -1,4 +1,4 @@
-import { LinkKind, SocketKind } from './elements';
+import { LinkKind, SocketKind, type LinkStyling } from './elements';
 
 /**
  * Defines all possible atomic mutations that can be recorded in history.
@@ -33,6 +33,7 @@ export type HistoryAction =
       from: number;
       to: number;
       kind: LinkKind;
+      styling?: LinkStyling;
       inner?: any;
     }
   | {
@@ -41,6 +42,7 @@ export type HistoryAction =
       from: number;
       to: number;
       kind: LinkKind;
+      styling?: LinkStyling;
       inner?: any;
     }
   | {
@@ -49,6 +51,12 @@ export type HistoryAction =
       from: { old: number; new: number };
       to: { old: number; new: number };
       waypoints?: { old: { x: number; y: number }[]; new: { x: number; y: number }[] };
+    }
+  | {
+      type: 'UPDATE_LINK_STYLING';
+      id: number;
+      from: LinkStyling;
+      to: LinkStyling;
     }
   | { type: 'ADD_TO_GROUP'; groupId: number; entityId: number; oldParentId: number | null }
   | { type: 'REMOVE_FROM_GROUP'; groupId: number; entityId: number; oldParentId: number | null }
@@ -77,10 +85,13 @@ export type HistoryAction =
 export interface Command {
   /** Array of actions to perform during 'redo'. */
   do: HistoryAction[];
+
   /** Array of actions to perform during 'undo'. */
   undo: HistoryAction[];
+
   /** A human-readable label for the transaction. */
   label?: string;
+
   /** ISO timestamp of when the command was recorded. */
   timestamp: number;
 }
@@ -92,6 +103,7 @@ export interface Command {
 export class HistoryManager {
   /** The stack of commands that can be undone. */
   undoStack: Command[] = [];
+
   /** The stack of commands that can be reapplied (cleared on new mutation). */
   redoStack: Command[] = [];
   private maxHistory: number = 100;
