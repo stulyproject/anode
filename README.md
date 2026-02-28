@@ -26,41 +26,6 @@ graph validation and processing.
 The `anode-react` package is an optional, declarative layer that synchronizes
 this headless state with the React lifecycle.
 
-### Spatial Efficiency with QuadTree Indexing
-
-One of the primary challenges in building large-scale node editors is maintaining
-performance as the number of elements grows. Anode addresses this by integrating
-a QuadTree spatial index directly into the core layout engine. Instead of
-iterating through every node for rendering or selection, the engine performs
-spatial queries. This allows the UI layer to implement "spatial culling," where
-only the nodes currently within the user's viewport are processed or rendered.
-This optimization ensures that even graphs with thousands of nodes remain
-interactive and fluid, as the rendering overhead scales with the viewport size
-rather than the total graph complexity.
-
-### Transactional Integrity and History
-
-Managing state in a complex graph requires more than simple reactivity; it requires
-transactional control. Anode's `HistoryManager` implements a command-based undo/redo
-system that tracks discrete actions performed on the context. To handle operations
-that involve multiple simultaneous changes—such as deleting a group and its nested
-links or executing an automated layout—the engine provides a `batch` method.
-By wrapping modifications in a batch, developers ensure that all changes are
-treated as a single atomic transaction in the history stack, preventing
-inconsistent intermediate states and providing a clean user experience for reverts.
-
-### Reactive Data Propagation
-
-Anode provides a built-in mechanism for value propagation between sockets, turning
-the visual graph into a functional data-flow engine. Sockets are categorized as
-either inputs or outputs, and links serve as the conduits for data.
-When an output socket's value is updated, the engine automatically propagates that
-value through all established links to the target input sockets.
-This propagation is decoupled from the UI re-render cycle; the React bindings
-utilize specialized hooks to subscribe to specific socket changes, ensuring that
-components only update when their relevant data actually changes, further reducing
-unnecessary reconciliation work.
-
 ### Quick Start Examples
 
 #### 1. Headless Core (Framework-Agnostic)
@@ -82,20 +47,14 @@ ctx.newLink(outA, inB);
 nodeA.move(100, 100);
 ```
 
-#### 2. React Integration
+#### 2. Data Flow propagation
 
-```tsx
-import { AnodeProvider, World } from '@stuly/anode-react';
+```typescript
+// Sockets automatically propagate values to their links
+ctx.setSocketValue(outA.id, 42);
 
-const MyNode = ({ entity }) => <div>{entity.data.label}</div>;
-
-export default function App() {
-  return (
-    <AnodeProvider>
-      <World nodeTypes={{ myNode: MyNode }} />
-    </AnodeProvider>
-  );
-}
+// inB value will be 42 after propagation
+console.log(ctx.sockets.get(inB.id).value);
 ```
 
 #### 3. Atomic Operations (History)
@@ -109,16 +68,6 @@ ctx.batch(() => {
 
 ctx.history.undo();
 ctx.history.redo();
-```
-
-#### 4. Data Flow propagation
-
-```typescript
-// Sockets automatically propagate values to their links
-ctx.setSocketValue(outA.id, 42);
-
-// inB value will be 42 after propagation
-console.log(ctx.sockets.get(inB.id).value);
 ```
 
 ### Advanced Integration Example
@@ -163,6 +112,41 @@ const CalculationNode = ({ entity }: { entity: Entity }) => {
   );
 };
 ```
+
+### Spatial Efficiency with QuadTree Indexing
+
+One of the primary challenges in building large-scale node editors is maintaining
+performance as the number of elements grows. Anode addresses this by integrating
+a QuadTree spatial index directly into the core layout engine. Instead of
+iterating through every node for rendering or selection, the engine performs
+spatial queries. This allows the UI layer to implement "spatial culling," where
+only the nodes currently within the user's viewport are processed or rendered.
+This optimization ensures that even graphs with thousands of nodes remain
+interactive and fluid, as the rendering overhead scales with the viewport size
+rather than the total graph complexity.
+
+### Transactional Integrity and History
+
+Managing state in a complex graph requires more than simple reactivity; it requires
+transactional control. Anode's `HistoryManager` implements a command-based undo/redo
+system that tracks discrete actions performed on the context. To handle operations
+that involve multiple simultaneous changes—such as deleting a group and its nested
+links or executing an automated layout—the engine provides a `batch` method.
+By wrapping modifications in a batch, developers ensure that all changes are
+treated as a single atomic transaction in the history stack, preventing
+inconsistent intermediate states and providing a clean user experience for reverts.
+
+### Reactive Data Propagation
+
+Anode provides a built-in mechanism for value propagation between sockets, turning
+the visual graph into a functional data-flow engine. Sockets are categorized as
+either inputs or outputs, and links serve as the conduits for data.
+When an output socket's value is updated, the engine automatically propagates that
+value through all established links to the target input sockets.
+This propagation is decoupled from the UI re-render cycle; the React bindings
+utilize specialized hooks to subscribe to specific socket changes, ensuring that
+components only update when their relevant data actually changes, further reducing
+unnecessary reconciliation work.
 
 ### Technical Project Structure
 
