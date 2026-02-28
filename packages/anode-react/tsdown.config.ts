@@ -4,5 +4,6 @@ export default defineConfig({
   entry: ['./src/index.ts'],
   platform: 'browser',
   dts: true,
-  unbundle: true
+  unbundle: true,
+  external: ['react', 'react-dom', 'react/jsx-runtime']
 });

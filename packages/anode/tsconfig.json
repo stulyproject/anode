@@ -11,6 +11,8 @@
 
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
 
     "strict": true,
     "verbatimModuleSyntax": true,
