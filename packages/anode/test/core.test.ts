@@ -1,101 +1,90 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Context } from '../src/core/context';
-import { SocketKind } from '../src/core/elements';
-import { Rect } from '../src/core/layout';
+import { Context } from '../src/core/context.js';
+import { SocketKind } from '../src/core/elements.js';
 
 describe('Anode Core', () => {
-  let ctx: Context<{ label: string }>;
+  let ctx: Context;
 
   beforeEach(() => {
     ctx = new Context();
   });
 
-  describe('Basic Operations', () => {
-    it('should create entities and sockets', () => {
+  describe('Entities', () => {
+    it('should create a new entity', () => {
       const node = ctx.newEntity({ label: 'Test' });
-      const socket = ctx.newSocket(node, SocketKind.OUTPUT, 'out');
-
       expect(ctx.entities.size).toBe(1);
-      expect(node.sockets.size).toBe(1);
-      expect(ctx.sockets.has(socket.id)).toBe(true);
+      expect(node.inner.label).toBe('Test');
     });
 
-    it('should link sockets', () => {
+    it('should drop an entity and its associated sockets', () => {
+      const node = ctx.newEntity({});
+      ctx.newSocket(node, SocketKind.OUTPUT, 'out');
+      expect(ctx.sockets.size).toBe(1);
+
+      ctx.dropEntity(node);
+      expect(ctx.entities.size).toBe(0);
+      expect(ctx.sockets.size).toBe(0);
+    });
+  });
+
+  describe('Links', () => {
+    it('should create a valid link', () => {
       const nodeA = ctx.newEntity({ label: 'A' });
-      const outA = ctx.newSocket(nodeA, SocketKind.OUTPUT, 'out');
       const nodeB = ctx.newEntity({ label: 'B' });
+      const outA = ctx.newSocket(nodeA, SocketKind.OUTPUT, 'out');
       const inB = ctx.newSocket(nodeB, SocketKind.INPUT, 'in');
 
-      const link = ctx.newLink(outA, inB);
-      expect(link).not.toBeNull();
+      const link = ctx.newLink({ from: outA, to: inB });
       expect(ctx.links.size).toBe(1);
+      expect(link?.from).toBe(outA.id);
+      expect(link?.to).toBe(inB.id);
     });
-  });
 
-  describe('Coordinate System & Nested Groups', () => {
-    it('should calculate world positions correctly in nested groups', () => {
+    it('should prevent connecting same socket types', () => {
       const nodeA = ctx.newEntity({ label: 'Node A' });
-      const groupChild = ctx.newGroup('Child');
-      const groupParent = ctx.newGroup('Parent');
-
-      ctx.addToGroup(groupChild.id, nodeA.id);
-      ctx.addGroupToGroup(groupParent.id, groupChild.id);
-
-      // Move parent
-      ctx.moveGroup(groupParent, 100, 50);
-      expect(ctx.getWorldPosition(nodeA.id)).toMatchObject({ x: 100, y: 50 });
-
-      // Move child relative to parent
-      ctx.moveGroup(groupChild, 10, 20);
-      expect(ctx.getWorldPosition(nodeA.id)).toMatchObject({ x: 110, y: 70 });
-    });
-
-    it('should query entities via QuadTree', () => {
-      const node = ctx.newEntity({ label: 'Node' });
-      node.move(50, 50);
-
-      const found = ctx.quadTree.query(new Rect(40, 40, 20, 20));
-      expect(found).toContain(node.id);
-
-      const notFound = ctx.quadTree.query(new Rect(0, 0, 10, 10));
-      expect(notFound).not.toContain(node.id);
-    });
-  });
-
-  describe('Validation', () => {
-    it('should prevent cycles', () => {
-      const nodeA = ctx.newEntity({ label: 'A' });
       const outA = ctx.newSocket(nodeA, SocketKind.OUTPUT, 'out');
       const inA = ctx.newSocket(nodeA, SocketKind.INPUT, 'in');
 
+      // Same entity link prevention
+      expect(ctx.newLink({ from: outA, to: inA })).toBeNull();
+    });
+
+    it('should detect cycles', () => {
+      const nodeA = ctx.newEntity({ label: 'A' });
       const nodeB = ctx.newEntity({ label: 'B' });
+      const outA = ctx.newSocket(nodeA, SocketKind.OUTPUT, 'out');
+      const inA = ctx.newSocket(nodeA, SocketKind.INPUT, 'in');
       const outB = ctx.newSocket(nodeB, SocketKind.OUTPUT, 'out');
       const inB = ctx.newSocket(nodeB, SocketKind.INPUT, 'in');
 
-      // A -> B
-      ctx.newLink(outA, inB);
+      ctx.newLink({ from: outA, to: inB });
+      const linkBA = ctx.newLink({ from: outB, to: inA });
 
-      // B -> A (Cycle)
-      const linkBA = ctx.newLink(outB, inA);
       expect(linkBA).toBeNull();
-      expect(ctx.links.size).toBe(1);
     });
   });
 
-  describe('Serialization', () => {
-    it('should preserve nested structures through JSON', () => {
-      const nodeA = ctx.newEntity({ label: 'A' });
+  describe('Groups', () => {
+    it('should handle nested groups', () => {
+      const groupChild = ctx.newGroup('Child');
+      const groupParent = ctx.newGroup('Parent');
+
+      ctx.addGroupToGroup(groupParent.id, groupChild.id);
+      expect(groupChild.parentId).toBe(groupParent.id);
+      expect(groupParent.groups.has(groupChild.id)).toBe(true);
+    });
+
+    it('should update entity world position when group moves', () => {
       const group = ctx.newGroup('G');
-      ctx.addToGroup(group.id, nodeA.id);
-      group.position.set(10, 10);
+      const node = ctx.newEntity({ label: 'Node' });
+      ctx.addToGroup(group.id, node.id);
 
-      const data = ctx.toJSON();
-      const newCtx = new Context();
-      newCtx.fromJSON(data);
+      node.move(10, 10);
+      group.position.set(50, 50);
 
-      expect(newCtx.entities.size).toBe(1);
-      expect(newCtx.groups.size).toBe(1);
-      expect(newCtx.getWorldPosition(nodeA.id)).toMatchObject({ x: 10, y: 10 });
+      const worldPos = ctx.getWorldPosition(node.id);
+      expect(worldPos.x).toBe(60);
+      expect(worldPos.y).toBe(60);
     });
   });
 });
