@@ -1,11 +1,11 @@
 import React from 'react';
-import { useViewport, useAnode } from '../context.js';
+import { useViewport, useAnode, useWorldRef } from '../context.js';
 
 /**
  * A floating UI control panel providing standard canvas interactions
  * like zooming in/out and fitting all nodes into the current view.
  *
- * **Usage:**
+ * @example
  * ```tsx
  * <World>
  *   <Controls />
@@ -14,9 +14,15 @@ import { useViewport, useAnode } from '../context.js';
  */
 export const Controls: React.FC<{
   style?: React.CSSProperties;
-}> = ({ style }) => {
+  buttonStyleOverride?: React.CSSProperties;
+}> = ({ style, buttonStyleOverride }) => {
+  const finalButtonStyle = {
+    ...buttonStyle,
+    ...buttonStyleOverride
+  };
   const { viewport, setViewport } = useViewport();
   const ctx = useAnode();
+  const worldRef = useWorldRef();
 
   const onZoomIn = () => {
     setViewport({ ...viewport, k: Math.min(viewport.k * 1.2, 5) });
@@ -48,10 +54,9 @@ export const Controls: React.FC<{
     const w = maxX - minX + padding * 2;
     const h = maxY - minY + padding * 2;
 
-    // We assume the World is roughly the window size for now
-    // or we could pass world dimensions to this component.
-    const containerW = window.innerWidth;
-    const containerH = window.innerHeight;
+    const container = worldRef.current;
+    const containerW = container ? container.clientWidth : window.innerWidth;
+    const containerH = container ? container.clientHeight : window.innerHeight;
 
     const k = Math.min(containerW / w, containerH / h, 1);
     const x = (containerW - (maxX + minX) * k) / 2;
@@ -69,19 +74,62 @@ export const Controls: React.FC<{
         left: 20,
         display: 'flex',
         flexDirection: 'column',
-        gap: 5,
         zIndex: 100,
+        gap: 5,
         ...style
       }}
     >
-      <button onClick={onZoomIn} style={buttonStyle}>
-        +
+      <button onClick={onZoomIn} style={finalButtonStyle}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="lucide lucide-plus-icon lucide-plus"
+        >
+          <path d="M5 12h14" />
+          <path d="M12 5v14" />
+        </svg>
       </button>
-      <button onClick={onZoomOut} style={buttonStyle}>
-        -
+      <button onClick={onZoomOut} style={finalButtonStyle}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="lucide lucide-minus-icon lucide-minus"
+        >
+          <path d="M5 12h14" />
+        </svg>
       </button>
-      <button onClick={onFitView} style={buttonStyle}>
-        w
+      <button onClick={onFitView} style={finalButtonStyle}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="lucide lucide-maximize-icon lucide-maximize"
+        >
+          <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+          <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+          <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+        </svg>
       </button>
     </div>
   );
@@ -90,6 +138,7 @@ export const Controls: React.FC<{
 const buttonStyle: React.CSSProperties = {
   width: 30,
   height: 30,
+  padding: 2,
   background: 'white',
   border: '1px solid #ccc',
   borderRadius: 4,

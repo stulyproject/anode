@@ -12,7 +12,7 @@ export interface BackgroundProps {
  * A decorative grid or dot pattern overlay for the canvas.
  * Automatically pans and scales with the viewport.
  *
- * **Usage:**
+ * @example
  * ```tsx
  * <World>
  *   <Background pattern="dots" color="#ccc" />

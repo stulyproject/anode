@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAnode, useViewport } from '../context.js';
-import { Group as GroupCore, Rect, Vec2 } from '@stuly/anode';
+import { Group as GroupCore } from '@stuly/anode';
 
 export interface GroupProps {
   id: number;
@@ -53,19 +53,7 @@ export const Group: React.FC<GroupProps> = ({ id, children }) => {
     e.stopPropagation();
     setIsDragging(true);
 
-    const startX = e.clientX;
-    const startY = e.clientY;
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const dx = (moveEvent.clientX - startX) / viewport.k;
-      const dy = (moveEvent.clientY - startY) / viewport.k;
-
-      // We need to be careful with moveGroup because it's incremental
-      // But we are using startX/startY which is absolute from drag start.
-      // So we should track the previous dx/dy or just pass the delta since last move.
-    };
-
-    // Better: use delta
+    // Use delta for movement
     let lastX = e.clientX;
     let lastY = e.clientY;
 

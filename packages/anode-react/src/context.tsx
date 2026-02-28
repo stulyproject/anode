@@ -1,4 +1,15 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type FC,
+  type ReactNode,
+  type Dispatch,
+  type SetStateAction,
+  type RefObject
+} from 'react';
 import { Context } from '@stuly/anode';
 
 interface Viewport {
@@ -9,17 +20,18 @@ interface Viewport {
 
 interface AnodeContextValue {
   ctx: Context;
+  worldRef: RefObject<HTMLDivElement | null>;
   viewport: Viewport;
   setViewport: (v: Viewport) => void;
   screenToWorld: (clientX: number, clientY: number) => { x: number; y: number };
-  setScreenToWorld: React.Dispatch<
-    React.SetStateAction<(clientX: number, clientY: number) => { x: number; y: number }>
+  setScreenToWorld: Dispatch<
+    SetStateAction<(clientX: number, clientY: number) => { x: number; y: number }>
   >;
   selection: {
     nodes: Set<number>;
     links: Set<number>;
   };
-  setSelection: React.Dispatch<React.SetStateAction<{ nodes: Set<number>; links: Set<number> }>>;
+  setSelection: Dispatch<SetStateAction<{ nodes: Set<number>; links: Set<number> }>>;
 }
 
 /**
@@ -73,11 +85,29 @@ export const useSelection = () => {
 };
 
 /**
+ * Accesses the reference to the main World container element.
+ * Useful for measuring container dimensions or targeting DOM events.
+ */
+export const useWorldRef = () => {
+  const value = useContext(AnodeReactContext);
+  if (!value) {
+    throw new Error('useWorldRef must be used within an AnodeProvider');
+  }
+  return value.worldRef;
+};
+
+export interface AnodeProviderProps {
+  children: ReactNode;
+  /** Optional existing context instance to use. */
+  context?: Context;
+}
+
+/**
  * The root provider for any Anode React application.
  * Wraps the internal headless engine and provides reactive state for
  * viewport and selection.
  *
- * **Usage:**
+ * @example
  * ```tsx
  * <AnodeProvider>
  *   <World>
@@ -86,11 +116,10 @@ export const useSelection = () => {
  * </AnodeProvider>
  * ```
  */
-export const AnodeProvider: React.FC<{ children: React.ReactNode; context?: Context }> = ({
-  children,
-  context
-}) => {
+export const AnodeProvider: FC<AnodeProviderProps> = ({ children, context }) => {
+  // Use lazy initializer to ensure Context is only created once
   const [ctx] = useState(() => context ?? new Context());
+  const worldRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, k: 1 });
   const [screenToWorld, setScreenToWorld] = useState<
     (clientX: number, clientY: number) => { x: number; y: number }
@@ -103,6 +132,7 @@ export const AnodeProvider: React.FC<{ children: React.ReactNode; context?: Cont
   const value = useMemo(
     () => ({
       ctx,
+      worldRef,
       viewport,
       setViewport,
       screenToWorld,
@@ -110,7 +140,7 @@ export const AnodeProvider: React.FC<{ children: React.ReactNode; context?: Cont
       selection,
       setSelection
     }),
-    [ctx, viewport, screenToWorld, selection]
+    [ctx, worldRef, viewport, screenToWorld, selection]
   );
 
   return <AnodeReactContext.Provider value={value}>{children}</AnodeReactContext.Provider>;

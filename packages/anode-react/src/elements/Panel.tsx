@@ -6,7 +6,7 @@ export type PanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-r
  * A helper component to overlay custom UI elements (like toolbars or sidebars)
  * at specific anchor points on the canvas.
  *
- * **Usage:**
+ * @example
  * ```tsx
  * <World>
  *   <Panel position="top-right">

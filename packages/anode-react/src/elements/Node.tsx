@@ -1,17 +1,28 @@
-import React, { useEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useState,
+  type FC,
+  type ReactNode,
+  type MouseEvent,
+  type TouchEvent
+} from 'react';
 import { useAnode, useViewport, useSelection } from '../context.js';
 import { Entity } from '@stuly/anode';
 
 export interface NodeProps {
   id: number;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 export interface NodeComponentProps {
   entity: Entity;
 }
 
-export const Node: React.FC<NodeProps> = ({ id, children }) => {
+/**
+ * A wrapper component for rendering individual nodes in the graph.
+ * Handles dragging, selection, and coordinate synchronization.
+ */
+export const Node: FC<NodeProps> = ({ id, children }) => {
   const ctx = useAnode();
   const { viewport } = useViewport();
   const { selection, setSelection } = useSelection();
@@ -22,10 +33,9 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
   useEffect(() => {
     if (!entity) return;
 
-    const onMove = (e: any) => {
-      if (e.id === id) {
-        setTick((t) => t + 1);
-      }
+    // Force re-render when the entity moves in the core engine
+    const onMove = () => {
+      setTick((t) => t + 1);
     };
 
     const handle = ctx.registerEntityMoveListener(onMove);
@@ -53,7 +63,7 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
         transition: isDragging ? 'none' : 'left 0.15s ease-out, top 0.15s ease-out',
         zIndex: isDragging ? 1000 : 1
       }}
-      onMouseDown={(e) => {
+      onMouseDown={(e: MouseEvent) => {
         if (e.button !== 0) return;
         setIsDragging(true);
 
@@ -73,7 +83,7 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
         const startPosX = entity.position.x;
         const startPosY = entity.position.y;
 
-        const onMouseMove = (moveEvent: MouseEvent) => {
+        const onMouseMove = (moveEvent: globalThis.MouseEvent) => {
           const dx = (moveEvent.clientX - startX) / viewport.k;
           const dy = (moveEvent.clientY - startY) / viewport.k;
 
@@ -98,7 +108,7 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
         document.addEventListener('mouseup', onMouseUp);
         e.stopPropagation();
       }}
-      onTouchStart={(e) => {
+      onTouchStart={(e: TouchEvent) => {
         setIsDragging(true);
 
         setSelection({ nodes: new Set([id]), links: new Set() });
@@ -110,7 +120,7 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
         const startPosX = entity.position.x;
         const startPosY = entity.position.y;
 
-        const onTouchMove = (moveEvent: TouchEvent) => {
+        const onTouchMove = (moveEvent: globalThis.TouchEvent) => {
           const touch = moveEvent.touches[0];
           if (!touch) return;
           const dx = (touch.clientX - startX) / viewport.k;
@@ -124,7 +134,6 @@ export const Node: React.FC<NodeProps> = ({ id, children }) => {
           newY = Math.round(newY / gridSize) * gridSize;
 
           entity.move(newX, newY);
-          // Prevent scrolling while dragging
           if (moveEvent.cancelable) moveEvent.preventDefault();
         };
 

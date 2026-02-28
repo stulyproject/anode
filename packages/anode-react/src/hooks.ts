@@ -1,13 +1,13 @@
 import { useSyncExternalStore, useMemo } from 'react';
 import { useAnode, useViewport } from './context.js';
-import { Entity, Link, Group } from '@stuly/anode';
+import { Entity } from '@stuly/anode';
 import { Rect } from '@stuly/anode';
 
 /**
  * Returns an array of all entities currently in the graph.
  * Reactively updates when nodes are created, deleted, or moved.
  *
- * **Usage:**
+ * @example
  * ```tsx
  * const nodes = useNodes();
  * ```
