@@ -1,6 +1,6 @@
 import { bench, describe } from 'vitest';
 import { Context } from '../src/core/context.js';
-import { SocketKind, LinkKind, Vec2 } from '../src/core/elements.js';
+import { SocketKind, type Socket } from '../src/core/elements.js';
 import { Rect } from '../src/core/layout.js';
 
 describe('Anode Core Benchmarks', () => {
@@ -27,8 +27,8 @@ describe('Anode Core Benchmarks', () => {
     bench('Link 1000 entities sequentially', () => {
       ctxLinking.batch(() => {
         for (let i = 0; i < 999; i++) {
-          const outS = Array.from(nodes[i].sockets.values())[0];
-          const inS = Array.from(nodes[i + 1].sockets.values())[1];
+          const outS = Array.from(nodes[i].sockets.values())[0] as Socket;
+          const inS = Array.from(nodes[i + 1].sockets.values())[1] as Socket;
           ctxLinking.newLink({ from: outS, to: inS });
         }
       });
@@ -69,7 +69,7 @@ describe('Anode Core Benchmarks', () => {
     });
 
     const ctxChain = new Context();
-    const chainNodes = [];
+    const chainNodes: { n: any; out: Socket; input: Socket }[] = [];
     for (let i = 0; i < 100; i++) {
       const n = ctxChain.newEntity({ i });
       const out = ctxChain.newSocket(n, SocketKind.OUTPUT, 'out');
@@ -78,17 +78,24 @@ describe('Anode Core Benchmarks', () => {
     }
 
     for (let i = 0; i < 99; i++) {
-      ctxChain.newLink({ from: chainNodes[i].out, to: chainNodes[i + 1].input });
-      // Manual pipe
-      const inId = chainNodes[i + 1].input.id;
-      const outId = chainNodes[i + 1].out.id;
-      ctxChain.registerSocketValueListener((s, val) => {
-        if (s.id === inId) ctxChain.setSocketValue(outId, val);
-      });
+      const current = chainNodes[i];
+      const next = chainNodes[i + 1];
+      if (current && next) {
+        ctxChain.newLink({ from: current.out, to: next.input });
+        // Manual pipe
+        const inId = next.input.id;
+        const outId = next.out.id;
+        ctxChain.registerSocketValueListener((s, val) => {
+          if (s.id === inId) ctxChain.setSocketValue(outId, val);
+        });
+      }
     }
 
     bench('Chain propagation (100 links deep)', () => {
-      ctxChain.setSocketValue(chainNodes[0].out.id, Math.random());
+      const firstNode = chainNodes[0];
+      if (firstNode) {
+        ctxChain.setSocketValue(firstNode.out.id, Math.random());
+      }
     });
   });
 
