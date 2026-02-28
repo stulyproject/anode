@@ -1,19 +1,34 @@
-import { Entity, Link, LinkKind, Socket, SocketKind, Vec2, Group } from './elements';
+import {
+  Entity,
+  Link,
+  LinkKind,
+  Socket,
+  SocketKind,
+  Vec2,
+  Group,
+  type LinkStyling
+} from './elements';
 import { QuadTree, Rect } from './layout';
-import { HistoryManager, type HistoryAction, type Command } from './history';
+import { HistoryManager, type HistoryAction } from './history';
 
 /** Callback triggered when an entity is created or dropped */
 export type EntityCallback<T> = (entity: Entity<T>) => void;
+
 /** Callback triggered when a link is created, dropped, or updated */
 export type LinkCallback = (link: Link) => void;
+
 /** Callback triggered when a socket is created, dropped, or moved */
 export type SocketCallback = (socket: Socket) => void;
+
 /** Callback triggered when an entity moves, providing its new world position */
 export type EntityMoveCallback<T> = (entity: Entity<T>, pos: Vec2) => void;
+
 /** Callback triggered when a group is created or dropped */
 export type GroupCallback = (group: Group) => void;
+
 /** Callback triggered when a socket value is updated */
 export type SocketValueCallback = (socket: Socket, value: any) => void;
+
 /** A unique handle used to unregister a listener */
 export type CallbackHandle = number;
 
@@ -59,15 +74,19 @@ export class Context<T = any> {
 
   /** Map of all entities indexed by their unique ID */
   entities: Map<number, Entity<T>> = new Map();
+
   /** Map of all links indexed by their unique ID */
   links: Map<number, Link> = new Map();
+
   /** Map of all sockets indexed by their unique ID */
   sockets: Map<number, Socket> = new Map();
+
   /** Map of all groups indexed by their unique ID */
   groups: Map<number, Group> = new Map();
 
-  /** Spatial index for efficient querying and culling */
-  quadTree: QuadTree<number> = new QuadTree(new Rect(-100000, -100000, 200000, 200000));
+  /** Spatial index for efficient querying and culling. Auto-grows boundaries. */
+  quadTree: QuadTree<number> = new QuadTree(new Rect(-1000, -1000, 2000, 2000));
+
   /** Manager for undo/redo history */
   history: HistoryManager = new HistoryManager();
 
@@ -92,11 +111,24 @@ export class Context<T = any> {
   }
 
   private setupEntity(entity: Entity<T>) {
+    let lastPos = this.getWorldPosition(entity.id);
     entity.onMove((_pos) => {
-      this.updateQuadTree();
+      const newPos = this.getWorldPosition(entity.id);
+      if (!this.isBatchingQuadTree) {
+        this.quadTree.move(lastPos, newPos, entity.id);
+        for (const socket of entity.sockets.values()) {
+          this.quadTree.move(
+            new Vec2(lastPos.x + socket.offset.x, lastPos.y + socket.offset.y),
+            new Vec2(newPos.x + socket.offset.x, newPos.y + socket.offset.y),
+            entity.id
+          );
+        }
+      }
+      lastPos = newPos;
+
       for (const cb of this.entityMoveCallbacks.values()) {
         try {
-          cb(entity, this.getWorldPosition(entity.id));
+          cb(entity, newPos);
         } catch (err) {
           console.error(err);
         }
@@ -104,7 +136,13 @@ export class Context<T = any> {
     });
   }
 
-  /** Triggers all bulk change listeners. Usually called after undo/redo or batch operations. */
+  /**
+   * Triggers all bulk change listeners.
+   *
+   * **Side Effects:**
+   * 1. Invokes all functions registered via `registerBulkChangeListener`.
+   * Usually called after undo/redo or batch operations to sync UI state.
+   */
   notifyBulkChange() {
     for (const cb of this.bulkChangeCallbacks.values()) {
       try {
@@ -118,6 +156,9 @@ export class Context<T = any> {
   /**
    * Registers a callback that is triggered when multiple changes occur at once.
    * Useful for syncing UI state that doesn't need to respond to every individual mutation.
+   *
+   * @param cb The function to execute on bulk changes.
+   * @returns A unique handle to unregister the listener.
    */
   registerBulkChangeListener(cb: () => void): CallbackHandle {
     const handle = this.getNextCallbackHandle();
@@ -128,15 +169,22 @@ export class Context<T = any> {
   /**
    * Sets the value of a specific socket and triggers reactive propagation.
    *
+   * **Behaviors:**
+   * 1. **Propagation:** If the socket is an `OUTPUT`, pushes the value to all linked `INPUT` sockets recursively.
+   * 2. **Cycle Protection:** Uses a `visited` set to prevent infinite loops and stack overflows.
+   *
    * **Side Effects:**
    * 1. Updates the `socket.value`.
-   * 2. Triggers `SocketValueListener` for the socket.
-   * 3. If the socket is an `OUTPUT`, pushes the value to all linked `INPUT` sockets recursively.
+   * 2. Triggers `SocketValueListener` for each affected socket.
    *
    * @param socketId The unique ID of the socket.
    * @param value The new value to assign.
+   * @param visited Internal set used for cycle detection during recursion.
    */
-  setSocketValue(socketId: number, value: any) {
+  setSocketValue(socketId: number, value: any, visited: Set<number> = new Set()) {
+    if (visited.has(socketId)) return;
+    visited.add(socketId);
+
     const socket = this.sockets.get(socketId);
     if (!socket) return;
 
@@ -149,13 +197,18 @@ export class Context<T = any> {
     if (socket.kind === SocketKind.OUTPUT) {
       for (const link of this.links.values()) {
         if (link.from === socketId) {
-          this.setSocketValue(link.to, value);
+          this.setSocketValue(link.to, value, visited);
         }
       }
     }
   }
 
-  /** Registers a listener for socket value changes. */
+  /**
+   * Registers a listener for socket value changes.
+   *
+   * @param cb Callback receiving the updated socket and its new value.
+   * @returns A unique handle to unregister the listener.
+   */
   registerSocketValueListener(cb: SocketValueCallback): CallbackHandle {
     const handle = this.getNextCallbackHandle();
     this.socketValueCallbacks.set(handle, cb);
@@ -164,7 +217,11 @@ export class Context<T = any> {
 
   /**
    * Records a custom set of actions to the history stack.
-   * Internally used by all mutation methods.
+   * Internally used by all mutation methods to support undo/redo.
+   *
+   * @param doActions Actions to execute for "doing" this command.
+   * @param undoActions Actions to execute for "undoing" this command.
+   * @param label A human-readable label for the history entry.
    */
   record(
     doActions: HistoryAction | HistoryAction[],
@@ -188,10 +245,10 @@ export class Context<T = any> {
   /**
    * Executes a function as a single atomic transaction in the history stack.
    *
-   * During the batch:
-   * 1. Individual operations do not record separate history entries.
-   * 2. QuadTree updates are suspended until the end of the batch.
-   * 3. A single snapshot-based history entry is created for the entire operation.
+   * **Behaviors:**
+   * 1. **Transactionality:** Individual operations do not record separate history entries.
+   * 2. **QuadTree Suspension:** Spatial index updates are suspended until the end of the batch.
+   * 3. **Snapshotting:** A single state-based history entry is created for the entire operation.
    *
    * @param fn The function containing multiple mutations.
    * @param label A human-readable label for the history entry (e.g., "Layout Graph").
@@ -232,39 +289,47 @@ export class Context<T = any> {
   undo() {
     const cmd = this.history.undoStack.pop();
     if (!cmd) return;
-    this.isApplyingHistory = true;
-    this.isBatchingQuadTree = true;
-    try {
-      for (let i = cmd.undo.length - 1; i >= 0; i--) {
-        this.applyAction(cmd.undo[i]!);
-      }
-      this.isBatchingQuadTree = false;
-      this.updateQuadTree();
-      this.notifyBulkChange();
-      this.history.redoStack.push(cmd);
-    } finally {
-      this.isApplyingHistory = false;
-      this.isBatchingQuadTree = false;
-    }
+    this.apply(cmd.undo);
+    this.history.redoStack.push(cmd);
   }
 
   /** Re-applies the last undone transaction. */
   redo() {
     const cmd = this.history.redoStack.pop();
     if (!cmd) return;
+    this.apply(cmd.do);
+    this.history.undoStack.push(cmd);
+  }
+
+  /**
+   * Applies one or more atomic actions to the graph state.
+   * This is the primary entry point for real-time synchronization and history navigation.
+   *
+   * **Side Effects:**
+   * 1. Updates internal maps (`entities`, `links`, etc.).
+   * 2. Rebuilds/Updates QuadTree.
+   * 3. Triggers bulk change listeners.
+   *
+   * @param actions A single action or an array of actions to apply.
+   */
+  apply(actions: HistoryAction | HistoryAction[]) {
+    const acts = Array.isArray(actions) ? actions : [actions];
+    const oldApplying = this.isApplyingHistory;
+    const oldBatchingQT = this.isBatchingQuadTree;
+
     this.isApplyingHistory = true;
     this.isBatchingQuadTree = true;
+
     try {
-      for (const action of cmd.do) {
+      for (const action of acts) {
         this.applyAction(action);
       }
-      this.isBatchingQuadTree = false;
+      this.isBatchingQuadTree = oldBatchingQT;
       this.updateQuadTree();
       this.notifyBulkChange();
-      this.history.undoStack.push(cmd);
     } finally {
-      this.isApplyingHistory = false;
-      this.isBatchingQuadTree = false;
+      this.isApplyingHistory = oldApplying;
+      this.isBatchingQuadTree = oldBatchingQT;
     }
   }
 
@@ -278,9 +343,6 @@ export class Context<T = any> {
         const entity = this.entities.get(action.id);
         if (entity) {
           entity.position.set(action.to.x, action.to.y);
-          for (const cb of this.entityMoveCallbacks.values())
-            cb(entity, this.getWorldPosition(entity.id));
-          this.updateQuadTree();
         }
         break;
       }
@@ -289,13 +351,7 @@ export class Context<T = any> {
         if (group) {
           const dx = action.to.x - action.from.x;
           const dy = action.to.y - action.from.y;
-          const oldApplying = this.isApplyingHistory;
-          this.isApplyingHistory = true;
-          try {
-            this.moveGroup(group, dx, dy);
-          } finally {
-            this.isApplyingHistory = oldApplying;
-          }
+          this.moveGroup(group, dx, dy);
         }
         break;
       }
@@ -311,19 +367,12 @@ export class Context<T = any> {
           this.addToGroup(action.parentId, entity.id);
         }
         for (const cb of this.entityCreateCallbacks.values()) cb(entity);
-        this.updateQuadTree();
         break;
       }
       case 'DROP_ENTITY': {
         const entity = this.entities.get(action.id);
         if (entity) {
-          const oldApplying = this.isApplyingHistory;
-          this.isApplyingHistory = true;
-          try {
-            this.dropEntity(entity);
-          } finally {
-            this.isApplyingHistory = oldApplying;
-          }
+          this.dropEntity(entity);
         }
         break;
       }
@@ -332,6 +381,7 @@ export class Context<T = any> {
         const to = this.sockets.get(action.to);
         if (from && to) {
           const link = new Link(action.id, from.id, to.id, action.kind, action.inner);
+          if (action.styling) link.styling = { ...action.styling };
           this.links.set(link.id, link);
           this.lid = Math.max(this.lid, link.id + 1);
           for (const cb of this.linkCreateCallbacks.values()) cb(link);
@@ -341,13 +391,7 @@ export class Context<T = any> {
       case 'DROP_LINK': {
         const link = this.links.get(action.id);
         if (link) {
-          const oldApplying = this.isApplyingHistory;
-          this.isApplyingHistory = true;
-          try {
-            this.dropLink(link);
-          } finally {
-            this.isApplyingHistory = oldApplying;
-          }
+          this.dropLink(link);
         }
         break;
       }
@@ -359,6 +403,14 @@ export class Context<T = any> {
           if (action.waypoints) {
             link.waypoints = action.waypoints.new.map((p) => new Vec2(p.x, p.y));
           }
+          for (const cb of this.linkUpdateCallbacks.values()) cb(link);
+        }
+        break;
+      }
+      case 'UPDATE_LINK_STYLING': {
+        const link = this.links.get(action.id);
+        if (link) {
+          link.styling = { ...action.to };
           for (const cb of this.linkUpdateCallbacks.values()) cb(link);
         }
         break;
@@ -386,13 +438,7 @@ export class Context<T = any> {
       case 'DROP_SOCKET': {
         const socket = this.sockets.get(action.id);
         if (socket) {
-          const oldApplying = this.isApplyingHistory;
-          this.isApplyingHistory = true;
-          try {
-            this.dropSocket(socket);
-          } finally {
-            this.isApplyingHistory = oldApplying;
-          }
+          this.dropSocket(socket);
         }
         break;
       }
@@ -513,10 +559,23 @@ export class Context<T = any> {
     return false;
   }
 
-  /** Creates and returns a new group. */
-  newGroup(name: string = '') {
-    const group = new Group(this.getNextGid(), name);
+  /**
+   * Creates and returns a new group.
+   *
+   * **Side Effects:**
+   * 1. Adds group to `groups` map.
+   * 2. Triggers `GroupCreateListener`.
+   *
+   * @param name Human-readable name for the group.
+   * @param id Optional forced ID.
+   */
+  newGroup(name: string = '', id?: number) {
+    const gid = id ?? this.getNextGid();
+    const group = new Group(gid, name);
     this.groups.set(group.id, group);
+    if (id !== undefined) {
+      this.gid = Math.max(this.gid, id + 1);
+    }
     for (const cb of this.groupCreateCallbacks.values()) {
       try {
         cb(group);
@@ -601,7 +660,7 @@ export class Context<T = any> {
 
   /**
    * Moves a group and triggers move notifications for all nested entities recursively.
-   * This handles the complex coordinate system updates during group drags.
+   * Handles the complex coordinate system updates during group drags.
    */
   moveGroup(group: Group, dx: number, dy: number) {
     const oldBatching = this.isBatchingQuadTree;
@@ -684,7 +743,7 @@ export class Context<T = any> {
   }
 
   /**
-   * Rebuilds the QuadTree spatial index.
+   * Rebuilds or refreshes the QuadTree spatial index.
    * Suspended if `isBatchingQuadTree` is true.
    */
   updateQuadTree() {
@@ -706,18 +765,28 @@ export class Context<T = any> {
 
   /**
    * Creates a new entity.
+   *
+   * **Side Effects:**
+   * 1. Records 'CREATE_ENTITY' action in history.
+   * 2. Triggers `EntityCreateListener`.
+   *
    * @param inner Custom data associated with the entity.
-   * @param forcedId Optional forced ID (useful for synchronization/deserialization).
+   * @param id Optional forced ID.
+   * @param parentId Optional parent group ID.
    */
-  newEntity(inner: T, forcedId?: number) {
-    const id = forcedId ?? this.getNextEid();
-    const ett = new Entity(id, inner);
+  newEntity(inner: T, id?: number, parentId: number | null = null) {
+    const eid = id ?? this.getNextEid();
+    const ett = new Entity(eid, inner);
     this.entities.set(ett.id, ett);
-    if (forcedId !== undefined) {
-      this.eid = Math.max(this.eid, forcedId + 1);
+    if (id !== undefined) {
+      this.eid = Math.max(this.eid, id + 1);
     }
 
     this.setupEntity(ett);
+
+    if (parentId !== null) {
+      this.addToGroup(parentId, ett.id);
+    }
 
     if (!this.isApplyingHistory) {
       this.record(
@@ -752,7 +821,14 @@ export class Context<T = any> {
 
   /**
    * Drops an entity and all its associated sockets and links.
-   * This is performed as a batched operation to ensure consistent history.
+   *
+   * **Behaviors:**
+   * 1. **Batching:** Performed as a single atomic operation in history.
+   * 2. **Recursive Cleanup:** Drops all sockets and links attached to the entity.
+   *
+   * **Side Effects:**
+   * 1. Triggers `EntityDropListener`.
+   * 2. Updates QuadTree.
    */
   dropEntity(entity: Entity<T>) {
     if (this.entities.has(entity.id)) {
@@ -798,14 +874,25 @@ export class Context<T = any> {
     }
   }
 
-  /** Adds a new socket to an entity. */
-  newSocket(entity: Entity<T>, kind: SocketKind, name: string = '', forcedId?: number) {
-    const id = forcedId ?? this.getNextSid();
-    const socket = new Socket(id, entity.id, kind, name);
+  /**
+   * Adds a new socket to an entity.
+   *
+   * **Side Effects:**
+   * 1. Records 'CREATE_SOCKET' action in history.
+   * 2. Triggers `SocketCreateListener`.
+   *
+   * @param entity The entity to attach the socket to.
+   * @param kind INPUT or OUTPUT.
+   * @param name Unique name within the entity.
+   * @param id Optional forced ID.
+   */
+  newSocket(entity: Entity<T>, kind: SocketKind, name: string = '', id?: number) {
+    const sid = id ?? this.getNextSid();
+    const socket = new Socket(sid, entity.id, kind, name);
     this.sockets.set(socket.id, socket);
     entity.sockets.set(socket.id, socket);
-    if (forcedId !== undefined) {
-      this.sid = Math.max(this.sid, forcedId + 1);
+    if (id !== undefined) {
+      this.sid = Math.max(this.sid, id + 1);
     }
 
     if (!this.isApplyingHistory) {
@@ -815,7 +902,7 @@ export class Context<T = any> {
           id: socket.id,
           entityId: entity.id,
           kind,
-          name,
+          name: socket.name,
           offset: { ...socket.offset }
         },
         {
@@ -823,7 +910,7 @@ export class Context<T = any> {
           id: socket.id,
           entityId: entity.id,
           kind,
-          name,
+          name: socket.name,
           offset: { ...socket.offset }
         },
         'Create Socket'
@@ -840,7 +927,13 @@ export class Context<T = any> {
     return socket;
   }
 
-  /** Drops a socket and all links connected to it. */
+  /**
+   * Drops a socket and all links connected to it.
+   *
+   * **Side Effects:**
+   * 1. Triggers `SocketDropListener`.
+   * 2. Recursively drops all links connected to this socket.
+   */
   dropSocket(socket: Socket) {
     if (this.sockets.delete(socket.id)) {
       if (!this.isApplyingHistory) {
@@ -888,20 +981,32 @@ export class Context<T = any> {
 
   /**
    * Creates a new link between two sockets.
-   * Fails if the connection is invalid (e.g., creating a cycle, connecting same entity, etc.).
+   *
+   * **Validation:** Prevents self-loops, same-entity links, identical kind connections, duplicate links, and cycles.
+   *
+   * **Side Effects:**
+   * 1. Records 'CREATE_LINK' action in history.
+   * 2. Propagates value from `from` socket to `to` socket.
+   * 3. Triggers `LinkCreateListener`.
+   *
+   * @param options Configuration for the new link.
    */
-  newLink(
-    from: Socket,
-    to: Socket,
-    kind: LinkKind = LinkKind.BEZIER,
-    forcedId?: number,
-    inner: any = {}
-  ) {
+  newLink(options: {
+    from: Socket;
+    to: Socket;
+    kind?: LinkKind | undefined;
+    id?: number | undefined;
+    inner?: any | undefined;
+    styling?: LinkStyling | undefined;
+  }) {
+    const { from, to, kind = LinkKind.BEZIER, id: forcedId, inner = {}, styling } = options;
+
     if (!this.canLink(from, to)) {
       return null;
     }
     const id = forcedId ?? this.getNextLid();
     const link = new Link(id, from.id, to.id, kind, inner);
+    if (styling) link.styling = { ...link.styling, ...styling };
     this.links.set(link.id, link);
     if (forcedId !== undefined) {
       this.lid = Math.max(this.lid, forcedId + 1);
@@ -915,6 +1020,7 @@ export class Context<T = any> {
           from: link.from,
           to: link.to,
           kind: link.kind,
+          styling: { ...link.styling },
           inner: link.inner
         },
         {
@@ -923,6 +1029,7 @@ export class Context<T = any> {
           from: link.from,
           to: link.to,
           kind: link.kind,
+          styling: { ...link.styling },
           inner: link.inner
         },
         'Create Link'
@@ -941,6 +1048,42 @@ export class Context<T = any> {
       }
     }
     return link;
+  }
+
+  /** Updates a link's aesthetic styling and animations. */
+  updateLinkStyling(link: Link, styling: Partial<LinkStyling>) {
+    const oldStyling = { ...link.styling };
+    const newStyling = { ...link.styling, ...styling };
+
+    if (JSON.stringify(oldStyling) === JSON.stringify(newStyling)) return;
+
+    if (!this.isApplyingHistory) {
+      this.record(
+        {
+          type: 'UPDATE_LINK_STYLING',
+          id: link.id,
+          from: oldStyling,
+          to: newStyling
+        },
+        {
+          type: 'UPDATE_LINK_STYLING',
+          id: link.id,
+          from: newStyling,
+          to: oldStyling
+        },
+        'Update Link Styling'
+      );
+    }
+
+    link.styling = newStyling;
+
+    for (const cb of this.linkUpdateCallbacks.values()) {
+      try {
+        cb(link);
+      } catch (err) {
+        console.error(err);
+      }
+    }
   }
 
   /** Updates an existing link's source or target. */
@@ -1140,6 +1283,7 @@ export class Context<T = any> {
         from: l.from,
         to: l.to,
         kind: l.kind,
+        styling: l.styling,
         waypoints: l.waypoints.map((p) => ({ x: p.x, y: p.y })),
         inner: l.inner
       })),
@@ -1192,6 +1336,7 @@ export class Context<T = any> {
 
     for (const lData of data.links) {
       const link = new Link(lData.id, lData.from, lData.to, lData.kind, lData.inner);
+      if (lData.styling) link.styling = { ...link.styling, ...lData.styling };
       if (lData.waypoints) {
         link.waypoints = lData.waypoints.map((p: any) => new Vec2(p.x, p.y));
       }
