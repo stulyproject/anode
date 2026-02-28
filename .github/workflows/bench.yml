@@ -1,0 +1,42 @@
+name: Benchmark
+on:
+  workflow_run:
+    workflows: ['CI']
+    types:
+      - completed
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  deployments: write
+
+jobs:
+  benchmark:
+    name: Run Continuous Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25.x
+          cache: 'pnpm'
+
+      - run: pnpm install --recursive
+
+      - name: Run benchmark
+        run: pnpm run bench:out
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'vitest'
+          output-file-path: packages/anode/core-bench-result.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '130%'
+          fail-on-alert: true

@@ -14,6 +14,8 @@
     "build": "pnpm -r --workspace-concurrency=1 build",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
+    "bench": "pnpm -r run bench",
+    "bench:out": "pnpm -r run bench:out",
     "format": "prettier --write .",
     "check": "pnpm build && pnpm lint && pnpm test",
     "all": "pnpm format && pnpm check",
