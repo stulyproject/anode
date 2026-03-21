@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774125872584,
+  "lastUpdate": 1774125951146,
   "repoUrl": "https://github.com/stulyproject/anode",
   "entries": {
     "Benchmark": [
@@ -1116,6 +1116,100 @@ window.BENCHMARK_DATA = {
             "range": "0.10%",
             "unit": "ops/sec",
             "extra": "Samples: 667293\nMin: 0.0007 ms\nMax: 0.0510 ms\np99: 0.0008 ms\nMean: 0.0007 ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "delphin.blehoussi93@gmail.com",
+            "name": "Delphin Blehoussi",
+            "username": "luxluth"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f3f7e906be9d4f0e244b33228a994bfc5d1f0837",
+          "message": "Merge pull request #5 from stulyproject/changeset-release/master\n\nVersion Packages",
+          "timestamp": "2026-03-21T21:45:01+01:00",
+          "tree_id": "7b1668e4c1e715bf812ce1517e9efc0e541b8e0d",
+          "url": "https://github.com/stulyproject/anode/commit/f3f7e906be9d4f0e244b33228a994bfc5d1f0837"
+        },
+        "date": 1774125950388,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "Create 1000 entities with 2 sockets",
+            "value": 1.2521097976529003,
+            "range": "1.54%",
+            "unit": "ops/sec",
+            "extra": "Samples: 10\nMin: 788.2696 ms\nMax: 846.6603 ms\np99: 846.6603 ms\nMean: 798.6520 ms"
+          },
+          {
+            "name": "Link 1000 entities sequentially",
+            "value": 249.1527009285976,
+            "range": "4.25%",
+            "unit": "ops/sec",
+            "extra": "Samples: 125\nMin: 3.2734 ms\nMax: 13.1494 ms\np99: 7.8605 ms\nMean: 4.0136 ms"
+          },
+          {
+            "name": "Query 2000 nodes (10% viewport)",
+            "value": 1571003.9622950463,
+            "range": "17.75%",
+            "unit": "ops/sec",
+            "extra": "Samples: 785502\nMin: 0.0005 ms\nMax: 45.2296 ms\np99: 0.0011 ms\nMean: 0.0006 ms"
+          },
+          {
+            "name": "Move 1000 nodes (Incremental QuadTree updates)",
+            "value": 1144.3342521346453,
+            "range": "1.28%",
+            "unit": "ops/sec",
+            "extra": "Samples: 573\nMin: 0.7863 ms\nMax: 2.1753 ms\np99: 1.2691 ms\nMean: 0.8739 ms"
+          },
+          {
+            "name": "Direct value propagation (1 link)",
+            "value": 5633930.997126043,
+            "range": "0.36%",
+            "unit": "ops/sec",
+            "extra": "Samples: 2816966\nMin: 0.0001 ms\nMax: 0.3170 ms\np99: 0.0003 ms\nMean: 0.0002 ms"
+          },
+          {
+            "name": "Chain propagation (100 links deep)",
+            "value": 8155.672990133854,
+            "range": "0.21%",
+            "unit": "ops/sec",
+            "extra": "Samples: 4078\nMin: 0.1203 ms\nMax: 0.5694 ms\np99: 0.1429 ms\nMean: 0.1226 ms"
+          },
+          {
+            "name": "Serialize 1000 nodes to JSON",
+            "value": 4806.637222215156,
+            "range": "5.25%",
+            "unit": "ops/sec",
+            "extra": "Samples: 2404\nMin: 0.0616 ms\nMax: 8.3836 ms\np99: 0.6409 ms\nMean: 0.2080 ms"
+          },
+          {
+            "name": "Deserialize 1000 nodes from JSON",
+            "value": 830.3636472001106,
+            "range": "0.79%",
+            "unit": "ops/sec",
+            "extra": "Samples: 416\nMin: 1.1709 ms\nMax: 2.1522 ms\np99: 1.7047 ms\nMean: 1.2043 ms"
+          },
+          {
+            "name": "Apply 500 atomic actions",
+            "value": 1115.3352356621238,
+            "range": "0.44%",
+            "unit": "ops/sec",
+            "extra": "Samples: 558\nMin: 0.8614 ms\nMax: 1.4729 ms\np99: 1.0323 ms\nMean: 0.8966 ms"
+          },
+          {
+            "name": "Resolve world position (50 levels deep)",
+            "value": 1343388.9145446345,
+            "range": "0.08%",
+            "unit": "ops/sec",
+            "extra": "Samples: 671695\nMin: 0.0007 ms\nMax: 0.0275 ms\np99: 0.0008 ms\nMean: 0.0007 ms"
           }
         ]
       }
