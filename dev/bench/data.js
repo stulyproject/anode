@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772309827209,
+  "lastUpdate": 1774125721778,
   "repoUrl": "https://github.com/stulyproject/anode",
   "entries": {
     "Benchmark": [
@@ -744,6 +744,100 @@ window.BENCHMARK_DATA = {
             "range": "0.41%",
             "unit": "ops/sec",
             "extra": "Samples: 635956\nMin: 0.0007 ms\nMax: 0.1097 ms\np99: 0.0008 ms\nMean: 0.0008 ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "delphin.blehoussi93@gmail.com",
+            "name": "luxluth",
+            "username": "luxluth"
+          },
+          "committer": {
+            "email": "delphin.blehoussi93@gmail.com",
+            "name": "luxluth",
+            "username": "luxluth"
+          },
+          "distinct": true,
+          "id": "5a6b1eae3efaf458193bf1b781a47e26b7ea29ed",
+          "message": "feat(react): add auto-recalculation of socket offsets on node resize\n\nIntegrated ResizeObserver into the Socket component to ensure link\nanchors stay synchronized when nodes change dimensions due to dynamic\ncontent or styling.",
+          "timestamp": "2026-03-21T21:41:08+01:00",
+          "tree_id": "074b1f04287bcb6f59f9d4888b08831b86826fde",
+          "url": "https://github.com/stulyproject/anode/commit/5a6b1eae3efaf458193bf1b781a47e26b7ea29ed"
+        },
+        "date": 1774125720910,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "Create 1000 entities with 2 sockets",
+            "value": 1.2486440764825595,
+            "range": "1.39%",
+            "unit": "ops/sec",
+            "extra": "Samples: 10\nMin: 790.0376 ms\nMax: 843.1335 ms\np99: 843.1335 ms\nMean: 800.8687 ms"
+          },
+          {
+            "name": "Link 1000 entities sequentially",
+            "value": 244.74401093696096,
+            "range": "4.43%",
+            "unit": "ops/sec",
+            "extra": "Samples: 123\nMin: 3.2918 ms\nMax: 13.5583 ms\np99: 8.2874 ms\nMean: 4.0859 ms"
+          },
+          {
+            "name": "Query 2000 nodes (10% viewport)",
+            "value": 1134900.6812437975,
+            "range": "0.42%",
+            "unit": "ops/sec",
+            "extra": "Samples: 567451\nMin: 0.0008 ms\nMax: 0.5473 ms\np99: 0.0015 ms\nMean: 0.0009 ms"
+          },
+          {
+            "name": "Move 1000 nodes (Incremental QuadTree updates)",
+            "value": 1108.6211347257713,
+            "range": "3.52%",
+            "unit": "ops/sec",
+            "extra": "Samples: 555\nMin: 0.7878 ms\nMax: 9.1271 ms\np99: 1.3788 ms\nMean: 0.9020 ms"
+          },
+          {
+            "name": "Direct value propagation (1 link)",
+            "value": 5768622.961669718,
+            "range": "0.37%",
+            "unit": "ops/sec",
+            "extra": "Samples: 2884312\nMin: 0.0001 ms\nMax: 0.3073 ms\np99: 0.0003 ms\nMean: 0.0002 ms"
+          },
+          {
+            "name": "Chain propagation (100 links deep)",
+            "value": 8107.137951809053,
+            "range": "0.30%",
+            "unit": "ops/sec",
+            "extra": "Samples: 4054\nMin: 0.1203 ms\nMax: 0.5570 ms\np99: 0.1713 ms\nMean: 0.1233 ms"
+          },
+          {
+            "name": "Serialize 1000 nodes to JSON",
+            "value": 5176.821739103439,
+            "range": "4.41%",
+            "unit": "ops/sec",
+            "extra": "Samples: 2591\nMin: 0.0596 ms\nMax: 7.2293 ms\np99: 0.6370 ms\nMean: 0.1932 ms"
+          },
+          {
+            "name": "Deserialize 1000 nodes from JSON",
+            "value": 833.7628845058031,
+            "range": "0.83%",
+            "unit": "ops/sec",
+            "extra": "Samples: 417\nMin: 1.1716 ms\nMax: 2.4906 ms\np99: 1.7240 ms\nMean: 1.1994 ms"
+          },
+          {
+            "name": "Apply 500 atomic actions",
+            "value": 1117.2082099630152,
+            "range": "0.44%",
+            "unit": "ops/sec",
+            "extra": "Samples: 559\nMin: 0.8673 ms\nMax: 1.5070 ms\np99: 1.0306 ms\nMean: 0.8951 ms"
+          },
+          {
+            "name": "Resolve world position (50 levels deep)",
+            "value": 1333622.0529138022,
+            "range": "0.09%",
+            "unit": "ops/sec",
+            "extra": "Samples: 666812\nMin: 0.0007 ms\nMax: 0.0294 ms\np99: 0.0008 ms\nMean: 0.0007 ms"
           }
         ]
       }
