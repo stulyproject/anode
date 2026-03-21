@@ -1,5 +1,11 @@
 # @stuly/anode-react
 
+## 1.0.1
+
+### Patch Changes
+
+- facf6b7: Integrated ResizeObserver into the Socket component to ensure link anchors stay synchronized when nodes change dimensions
+
 ## 1.0.0
 
 ### Minor Changes
