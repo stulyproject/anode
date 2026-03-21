@@ -89,7 +89,21 @@ export const Socket: FC<SocketProps> = ({ entityId, kind, name, className, style
   useEffect(() => {
     updateOffset();
     window.addEventListener('resize', updateOffset);
-    return () => window.removeEventListener('resize', updateOffset);
+
+    // Watch for parent node resize
+    const parentNode = ref.current?.closest('.anode-node');
+    let observer: ResizeObserver | null = null;
+    if (parentNode) {
+      observer = new ResizeObserver(() => {
+        updateOffset();
+      });
+      observer.observe(parentNode);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateOffset);
+      observer?.disconnect();
+    };
   }, [updateOffset]);
 
   return (
