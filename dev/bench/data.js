@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774125842863,
+  "lastUpdate": 1774125872584,
   "repoUrl": "https://github.com/stulyproject/anode",
   "entries": {
     "Benchmark": [
@@ -1024,6 +1024,98 @@ window.BENCHMARK_DATA = {
             "range": "0.09%",
             "unit": "ops/sec",
             "extra": "Samples: 671151\nMin: 0.0007 ms\nMax: 0.0328 ms\np99: 0.0008 ms\nMean: 0.0007 ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "luxluth",
+            "username": "luxluth",
+            "email": "delphin.blehoussi93@gmail.com"
+          },
+          "committer": {
+            "name": "luxluth",
+            "username": "luxluth",
+            "email": "delphin.blehoussi93@gmail.com"
+          },
+          "id": "facf6b7eff3d79d9c1e3f9397c7b5ccc082654ec",
+          "message": "chore(react): version update",
+          "timestamp": "2026-03-21T20:43:12Z",
+          "url": "https://github.com/stulyproject/anode/commit/facf6b7eff3d79d9c1e3f9397c7b5ccc082654ec"
+        },
+        "date": 1774125872180,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "Create 1000 entities with 2 sockets",
+            "value": 1.2485793679558639,
+            "range": "0.27%",
+            "unit": "ops/sec",
+            "extra": "Samples: 10\nMin: 797.2769 ms\nMax: 806.3432 ms\np99: 806.3432 ms\nMean: 800.9102 ms"
+          },
+          {
+            "name": "Link 1000 entities sequentially",
+            "value": 240.24208666937938,
+            "range": "6.01%",
+            "unit": "ops/sec",
+            "extra": "Samples: 121\nMin: 3.3298 ms\nMax: 18.3255 ms\np99: 7.7949 ms\nMean: 4.1625 ms"
+          },
+          {
+            "name": "Query 2000 nodes (10% viewport)",
+            "value": 1215035.608762088,
+            "range": "0.43%",
+            "unit": "ops/sec",
+            "extra": "Samples: 607518\nMin: 0.0007 ms\nMax: 0.6045 ms\np99: 0.0013 ms\nMean: 0.0008 ms"
+          },
+          {
+            "name": "Move 1000 nodes (Incremental QuadTree updates)",
+            "value": 1090.705912337696,
+            "range": "4.00%",
+            "unit": "ops/sec",
+            "extra": "Samples: 546\nMin: 0.8008 ms\nMax: 10.3101 ms\np99: 1.5409 ms\nMean: 0.9168 ms"
+          },
+          {
+            "name": "Direct value propagation (1 link)",
+            "value": 5741007.632577643,
+            "range": "0.52%",
+            "unit": "ops/sec",
+            "extra": "Samples: 2870504\nMin: 0.0001 ms\nMax: 0.3877 ms\np99: 0.0003 ms\nMean: 0.0002 ms"
+          },
+          {
+            "name": "Chain propagation (100 links deep)",
+            "value": 8086.83041789013,
+            "range": "0.23%",
+            "unit": "ops/sec",
+            "extra": "Samples: 4044\nMin: 0.1215 ms\nMax: 0.6019 ms\np99: 0.1445 ms\nMean: 0.1237 ms"
+          },
+          {
+            "name": "Serialize 1000 nodes to JSON",
+            "value": 5107.920837440814,
+            "range": "4.57%",
+            "unit": "ops/sec",
+            "extra": "Samples: 2554\nMin: 0.0616 ms\nMax: 7.2030 ms\np99: 0.6575 ms\nMean: 0.1958 ms"
+          },
+          {
+            "name": "Deserialize 1000 nodes from JSON",
+            "value": 806.3704173129391,
+            "range": "1.44%",
+            "unit": "ops/sec",
+            "extra": "Samples: 404\nMin: 1.1828 ms\nMax: 2.6625 ms\np99: 2.3081 ms\nMean: 1.2401 ms"
+          },
+          {
+            "name": "Apply 500 atomic actions",
+            "value": 1108.4228318032012,
+            "range": "0.49%",
+            "unit": "ops/sec",
+            "extra": "Samples: 555\nMin: 0.8686 ms\nMax: 1.5153 ms\np99: 1.0777 ms\nMean: 0.9022 ms"
+          },
+          {
+            "name": "Resolve world position (50 levels deep)",
+            "value": 1334584.449214491,
+            "range": "0.10%",
+            "unit": "ops/sec",
+            "extra": "Samples: 667293\nMin: 0.0007 ms\nMax: 0.0510 ms\np99: 0.0008 ms\nMean: 0.0007 ms"
           }
         ]
       }
