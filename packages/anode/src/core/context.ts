@@ -279,6 +279,7 @@ export class Context<T = any> {
         label: label ?? 'Batch Action',
         timestamp: Date.now()
       });
+      this.notifyBulkChange();
     } finally {
       this.isApplyingHistory = oldApplying;
       this.isBatchingQuadTree = oldBatchingQT;

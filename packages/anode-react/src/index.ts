@@ -16,5 +16,6 @@ export {
   useGroups,
   useVisibleNodes,
   useSocketValue,
-  useEntitySockets
+  useEntitySockets,
+  useGraphBounds
 } from './hooks.js';

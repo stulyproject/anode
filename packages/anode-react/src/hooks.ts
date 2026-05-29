@@ -52,21 +52,70 @@ export const useNodes = () => {
 export const useVisibleNodes = (containerRect?: { width: number; height: number }) => {
   const ctx = useAnode();
   const { viewport } = useViewport();
-  const allNodes = useNodes(); // Triggers on every move to sync visibility state
 
-  return useMemo(() => {
-    const w = (containerRect?.width || window.innerWidth) / viewport.k;
-    const h = (containerRect?.height || window.innerHeight) / viewport.k;
-    const x = -viewport.x / viewport.k;
-    const y = -viewport.y / viewport.k;
+  const store = useMemo(() => {
+    let lastVisibleIds: number[] = [];
+    let lastSnapshot: Entity[] = [];
 
-    // Add some padding to avoid culling flickering at edges
-    const padding = 300 / viewport.k;
-    const queryRect = new Rect(x - padding, y - padding, w + padding * 2, h + padding * 2);
+    const getQueryRect = () => {
+      const w = (containerRect?.width || window.innerWidth) / viewport.k;
+      const h = (containerRect?.height || window.innerHeight) / viewport.k;
+      const x = -viewport.x / viewport.k;
+      const y = -viewport.y / viewport.k;
+      const padding = 300 / viewport.k;
+      return new Rect(x - padding, y - padding, w + padding * 2, h + padding * 2);
+    };
 
-    const visibleIds = Array.from(new Set(ctx.quadTree.query(queryRect)));
-    return visibleIds.map((id) => ctx.entities.get(id)).filter((n): n is Entity => !!n);
-  }, [ctx, viewport, containerRect, allNodes]);
+    const computeSnapshot = () => {
+      const queryRect = getQueryRect();
+      const visibleIds = Array.from(new Set(ctx.quadTree.query(queryRect)));
+
+      // Compare sorted lists of IDs
+      const sa = [...visibleIds].sort((a, b) => a - b);
+      const sb = [...lastVisibleIds].sort((a, b) => a - b);
+
+      let equal = sa.length === sb.length;
+      if (equal) {
+        for (let i = 0; i < sa.length; i++) {
+          if (sa[i] !== sb[i]) {
+            equal = false;
+            break;
+          }
+        }
+      }
+
+      if (!equal) {
+        lastVisibleIds = visibleIds;
+        lastSnapshot = visibleIds.map((id) => ctx.entities.get(id)).filter((n): n is Entity => !!n);
+      }
+      return lastSnapshot;
+    };
+
+    computeSnapshot();
+
+    return {
+      subscribe: (onStoreChange: () => void) => {
+        const update = () => {
+          const oldSnapshot = lastSnapshot;
+          const newSnapshot = computeSnapshot();
+          if (newSnapshot !== oldSnapshot) {
+            onStoreChange();
+          }
+        };
+
+        const handles = [
+          ctx.registerEntityCreateListener(update),
+          ctx.registerEntityDropListener(update),
+          ctx.registerEntityMoveListener(update),
+          ctx.registerBulkChangeListener(update)
+        ];
+        return () => handles.forEach((h) => ctx.unregisterListener(h));
+      },
+      getSnapshot: () => computeSnapshot()
+    };
+  }, [ctx, viewport.x, viewport.y, viewport.k, containerRect?.width, containerRect?.height]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
 };
 
 /**
@@ -89,7 +138,6 @@ export const useEdges = () => {
         const handles = [
           ctx.registerLinkCreateListener(update),
           ctx.registerLinkDropListener(update),
-          ctx.registerEntityMoveListener(update), // Links need re-render on entity move for SVG path updates
           ctx.registerBulkChangeListener(update)
         ];
         return () => handles.forEach((h) => ctx.unregisterListener(h));
@@ -206,6 +254,81 @@ export const useGroups = () => {
         return () => handles.forEach((h) => ctx.unregisterListener(h));
       },
       getSnapshot: () => snapshot
+    };
+  }, [ctx]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+};
+
+/**
+ * Returns the current bounding box of all entities in the graph (with padding).
+ * Reactively updates when entities are added, removed, or moved.
+ */
+export const useGraphBounds = () => {
+  const ctx = useAnode();
+  const store = useMemo(() => {
+    let lastBounds = { x: 0, y: 0, w: 1000, h: 1000 };
+
+    const computeBounds = () => {
+      if (ctx.entities.size === 0) {
+        return { x: 0, y: 0, w: 1000, h: 1000 };
+      }
+
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+
+      for (const entity of ctx.entities.values()) {
+        const pos = ctx.getWorldPosition(entity.id);
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+        maxX = Math.max(maxX, pos.x);
+        maxY = Math.max(maxY, pos.y);
+      }
+
+      const padding = 100;
+      minX -= padding;
+      minY -= padding;
+      maxX += padding;
+      maxY += padding;
+
+      const w = maxX - minX;
+      const h = maxY - minY;
+
+      const diff =
+        Math.abs(lastBounds.x - minX) > 0.01 ||
+        Math.abs(lastBounds.y - minY) > 0.01 ||
+        Math.abs(lastBounds.w - w) > 0.01 ||
+        Math.abs(lastBounds.h - h) > 0.01;
+
+      if (diff) {
+        lastBounds = { x: minX, y: minY, w, h };
+      }
+      return lastBounds;
+    };
+
+    return {
+      subscribe: (onStoreChange: () => void) => {
+        const update = () => {
+          const oldBounds = lastBounds;
+          const newBounds = computeBounds();
+          if (newBounds !== oldBounds) {
+            onStoreChange();
+          }
+        };
+
+        const handles = [
+          ctx.registerEntityCreateListener(update),
+          ctx.registerEntityDropListener(update),
+          ctx.registerEntityMoveListener(update),
+          ctx.registerBulkChangeListener(update)
+        ];
+        return () => handles.forEach((h) => ctx.unregisterListener(h));
+      },
+      getSnapshot: () => {
+        return computeBounds();
+      }
     };
   }, [ctx]);
 

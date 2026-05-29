@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useAnode, useViewport } from '../context.js';
+import { useGraphBounds } from '../hooks.js';
 
 /**
  * A simplified bird's-eye view of the entire graph, providing
@@ -19,38 +20,7 @@ export const MiniMap: React.FC<{
 }> = ({ width = 200, height = 150, style }) => {
   const ctx = useAnode();
   const { viewport } = useViewport();
-
-  // This is a bit expensive to recalculate on every render,
-  // but for a prototype it's fine.
-  const bounds = useMemo(() => {
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-    if (ctx.entities.size === 0) return { x: 0, y: 0, w: 1000, h: 1000 };
-
-    for (const entity of ctx.entities.values()) {
-      const pos = ctx.getWorldPosition(entity.id);
-      minX = Math.min(minX, pos.x);
-      minY = Math.min(minY, pos.y);
-      maxX = Math.max(maxX, pos.x);
-      maxY = Math.max(maxY, pos.y);
-    }
-
-    // Add some padding
-    const padding = 100;
-    minX -= padding;
-    minY -= padding;
-    maxX += padding;
-    maxY += padding;
-
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-  }, [
-    ctx.entities.size,
-    Array.from(ctx.entities.values())
-      .map((e) => e.position.x + e.position.y)
-      .join(',')
-  ]);
+  const bounds = useGraphBounds();
 
   const scale = Math.min(width / bounds.w, height / bounds.h);
 
