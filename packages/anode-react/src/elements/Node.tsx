@@ -33,9 +33,11 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
   useEffect(() => {
     if (!entity) return;
 
-    // Force re-render when the entity moves in the core engine
-    const onMove = () => {
-      setTick((t) => t + 1);
+    // Force re-render when this specific entity moves in the core engine
+    const onMove = (movingEntity: Entity) => {
+      if (movingEntity.id === id) {
+        setTick((t) => t + 1);
+      }
     };
 
     const handle = ctx.registerEntityMoveListener(onMove);
@@ -67,41 +69,101 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
         if (e.button !== 0) return;
         setIsDragging(true);
 
+        let currentSelection = selection;
         if (e.shiftKey) {
           setSelection((prev) => {
             const next = new Set(prev.nodes);
             if (next.has(id)) next.delete(id);
             else next.add(id);
-            return { ...prev, nodes: next };
+            const updated = { ...prev, nodes: next };
+            currentSelection = updated;
+            return updated;
           });
         } else {
-          setSelection({ nodes: new Set([id]), links: new Set() });
+          if (!selection.nodes.has(id)) {
+            const updated = { nodes: new Set([id]), links: new Set<number>() };
+            setSelection(updated);
+            currentSelection = updated;
+          }
         }
 
         const startX = e.clientX;
         const startY = e.clientY;
-        const startPosX = entity.position.x;
-        const startPosY = entity.position.y;
+
+        const startPositions = new Map<number, { x: number; y: number }>();
+        const nodesToMove = Array.from(currentSelection.nodes)
+          .map((nid) => ctx.entities.get(nid))
+          .filter((n): n is Entity => !!n);
+
+        for (const node of nodesToMove) {
+          startPositions.set(node.id, { x: node.position.x, y: node.position.y });
+        }
+
+        let hasDragged = false;
 
         const onMouseMove = (moveEvent: globalThis.MouseEvent) => {
           const dx = (moveEvent.clientX - startX) / viewport.k;
           const dy = (moveEvent.clientY - startY) / viewport.k;
 
-          let newX = startPosX + dx;
-          let newY = startPosY + dy;
+          if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+            hasDragged = true;
+          }
 
-          // Snap to grid (15px)
-          const gridSize = 15;
-          newX = Math.round(newX / gridSize) * gridSize;
-          newY = Math.round(newY / gridSize) * gridSize;
+          for (const node of nodesToMove) {
+            const startPos = startPositions.get(node.id);
+            if (startPos) {
+              let newX = startPos.x + dx;
+              let newY = startPos.y + dy;
 
-          entity.move(newX, newY);
+              // Snap to grid (15px)
+              const gridSize = 15;
+              newX = Math.round(newX / gridSize) * gridSize;
+              newY = Math.round(newY / gridSize) * gridSize;
+
+              node.move(newX, newY);
+            }
+          }
         };
 
         const onMouseUp = () => {
           setIsDragging(false);
           document.removeEventListener('mousemove', onMouseMove);
           document.removeEventListener('mouseup', onMouseUp);
+
+          if (!hasDragged && !e.shiftKey) {
+            setSelection({ nodes: new Set([id]), links: new Set() });
+          }
+
+          if (hasDragged) {
+            const doActions: any[] = [];
+            const undoActions: any[] = [];
+
+            for (const node of nodesToMove) {
+              const startPos = startPositions.get(node.id);
+              if (startPos) {
+                const finalPos = { x: node.position.x, y: node.position.y };
+                if (startPos.x !== finalPos.x || startPos.y !== finalPos.y) {
+                  doActions.push({
+                    type: 'MOVE_ENTITY',
+                    id: node.id,
+                    from: { x: startPos.x, y: startPos.y },
+                    to: { x: finalPos.x, y: finalPos.y }
+                  });
+                  undoActions.push({
+                    type: 'MOVE_ENTITY',
+                    id: node.id,
+                    from: { x: finalPos.x, y: finalPos.y },
+                    to: { x: startPos.x, y: startPos.y }
+                  });
+                }
+              }
+            }
+
+            if (doActions.length > 0) {
+              ctx.record(doActions, undoActions, 'Move Nodes');
+              ctx.notifyBulkChange();
+            }
+          }
         };
 
         document.addEventListener('mousemove', onMouseMove);
@@ -111,14 +173,28 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
       onTouchStart={(e: TouchEvent) => {
         setIsDragging(true);
 
-        setSelection({ nodes: new Set([id]), links: new Set() });
+        let currentSelection = selection;
+        if (!selection.nodes.has(id)) {
+          const updated = { nodes: new Set([id]), links: new Set<number>() };
+          setSelection(updated);
+          currentSelection = updated;
+        }
 
         const touch = e.touches[0];
         if (!touch) return;
         const startX = touch.clientX;
         const startY = touch.clientY;
-        const startPosX = entity.position.x;
-        const startPosY = entity.position.y;
+
+        const startPositions = new Map<number, { x: number; y: number }>();
+        const nodesToMove = Array.from(currentSelection.nodes)
+          .map((nid) => ctx.entities.get(nid))
+          .filter((n): n is Entity => !!n);
+
+        for (const node of nodesToMove) {
+          startPositions.set(node.id, { x: node.position.x, y: node.position.y });
+        }
+
+        let hasDragged = false;
 
         const onTouchMove = (moveEvent: globalThis.TouchEvent) => {
           const touch = moveEvent.touches[0];
@@ -126,14 +202,23 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
           const dx = (touch.clientX - startX) / viewport.k;
           const dy = (touch.clientY - startY) / viewport.k;
 
-          let newX = startPosX + dx;
-          let newY = startPosY + dy;
+          if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+            hasDragged = true;
+          }
 
-          const gridSize = 15;
-          newX = Math.round(newX / gridSize) * gridSize;
-          newY = Math.round(newY / gridSize) * gridSize;
+          for (const node of nodesToMove) {
+            const startPos = startPositions.get(node.id);
+            if (startPos) {
+              let newX = startPos.x + dx;
+              let newY = startPos.y + dy;
 
-          entity.move(newX, newY);
+              const gridSize = 15;
+              newX = Math.round(newX / gridSize) * gridSize;
+              newY = Math.round(newY / gridSize) * gridSize;
+
+              node.move(newX, newY);
+            }
+          }
           if (moveEvent.cancelable) moveEvent.preventDefault();
         };
 
@@ -141,6 +226,37 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
           setIsDragging(false);
           document.removeEventListener('touchmove', onTouchMove);
           document.removeEventListener('touchend', onTouchEnd);
+
+          if (hasDragged) {
+            const doActions: any[] = [];
+            const undoActions: any[] = [];
+
+            for (const node of nodesToMove) {
+              const startPos = startPositions.get(node.id);
+              if (startPos) {
+                const finalPos = { x: node.position.x, y: node.position.y };
+                if (startPos.x !== finalPos.x || startPos.y !== finalPos.y) {
+                  doActions.push({
+                    type: 'MOVE_ENTITY',
+                    id: node.id,
+                    from: { x: startPos.x, y: startPos.y },
+                    to: { x: finalPos.x, y: finalPos.y }
+                  });
+                  undoActions.push({
+                    type: 'MOVE_ENTITY',
+                    id: node.id,
+                    from: { x: finalPos.x, y: finalPos.y },
+                    to: { x: startPos.x, y: startPos.y }
+                  });
+                }
+              }
+            }
+
+            if (doActions.length > 0) {
+              ctx.record(doActions, undoActions, 'Move Nodes');
+              ctx.notifyBulkChange();
+            }
+          }
         };
 
         document.addEventListener('touchmove', onTouchMove, { passive: false });
