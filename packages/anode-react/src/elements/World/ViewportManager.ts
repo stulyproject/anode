@@ -14,16 +14,16 @@ import { useViewport } from '../../context.js';
  * 1. Registers a non-passive `wheel` listener on the world container to intercept scroll behavior.
  * 2. Synchronizes the shared `ViewportContext` state.
  *
- * @param worldRef Reference to the scrollable world container element.
+ * @param worldEl The scrollable world container DOM element.
  * @returns The current viewport transform state (`x`, `y`, `k`).
  */
-export const useViewportManager = (worldRef: React.RefObject<HTMLDivElement | null>) => {
+export const useViewportManager = (worldEl: HTMLDivElement | null) => {
   const { viewport: transform, setViewport: setTransform } = useViewport();
   const transformRef = useRef(transform);
   transformRef.current = transform;
 
   useEffect(() => {
-    const el = worldRef.current;
+    const el = worldEl;
     if (!el) return;
 
     const onWheelNative = (e: WheelEvent) => {
@@ -49,7 +49,7 @@ export const useViewportManager = (worldRef: React.RefObject<HTMLDivElement | nu
 
     el.addEventListener('wheel', onWheelNative, { passive: false });
     return () => el.removeEventListener('wheel', onWheelNative);
-  }, [setTransform, worldRef]);
+  }, [setTransform, worldEl]);
 
   return { transform };
 };

@@ -80,10 +80,10 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
         top: worldPos.y,
         transform: 'translate(-50%, -50%)',
         cursor: isDragging ? 'grabbing' : 'grab',
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
+        // outline: isSelected ? '2px solid #3b82f6' : 'none',
         borderRadius: 4,
         transition: 'none',
-        zIndex: isDragging ? 1000 : 1
+        zIndex: isDragging || isSelected ? 1000 : 1
       }}
       onMouseDown={(e: MouseEvent) => {
         if (e.button !== 0) return;

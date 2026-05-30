@@ -99,7 +99,7 @@ export const World: React.FC<WorldProps> = ({
   renderLinksViaCanvas = true
 }) => {
   const ctxValue = useContext(AnodeReactContext)!;
-  const { setScreenToWorld, worldRef } = ctxValue;
+  const { setScreenToWorld, worldRef, viewportRef } = ctxValue;
 
   if (!worldRef) {
     throw new Error('World must be used within AnodeProvider with a valid worldRef');
@@ -108,13 +108,20 @@ export const World: React.FC<WorldProps> = ({
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const { selection, setSelection } = useSelection();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [worldEl, setWorldEl] = useState<HTMLDivElement | null>(null);
+
+  const setWorldRef = (node: HTMLDivElement | null) => {
+    worldRef.current = node;
+    setWorldEl(node);
+  };
 
   // Viewport Management (Pan/Zoom)
-  const { transform } = useViewportManager(worldRef);
+  const { transform } = useViewportManager(worldEl);
 
   // Interaction Handling (Selection/Dragging/Links)
   const { onMouseDown, onTouchStart, selectionBox, pendingLink } = useInteractionHandler({
     worldRef,
+    worldEl,
     onConnect,
     isValidConnection,
     defaultLinkKind
@@ -143,16 +150,16 @@ export const World: React.FC<WorldProps> = ({
 
   // Observer container size for culling logic
   useEffect(() => {
-    if (!worldRef.current) return;
+    if (!worldEl) return;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
       const { width, height } = entry.contentRect;
       setContainerSize({ width, height });
     });
-    observer.observe(worldRef.current);
+    observer.observe(worldEl);
     return () => observer.disconnect();
-  }, []);
+  }, [worldEl]);
 
   const entities = useVisibleNodes(containerSize);
   const links = useEdges();
@@ -163,6 +170,10 @@ export const World: React.FC<WorldProps> = ({
     if (!renderLinksViaCanvas) return;
 
     let animationId: number;
+    let needsRedraw = true;
+    let lastX = -999999;
+    let lastY = -999999;
+    let lastK = -999999;
 
     const render = () => {
       const canvas = canvasRef.current;
@@ -173,89 +184,97 @@ export const World: React.FC<WorldProps> = ({
 
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      const width = rect.width;
-      const height = rect.height;
+      const width = Math.round(rect.width * dpr);
+      const height = Math.round(rect.height * dpr);
 
-      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
+      const currentTransform = viewportRef.current;
+      const transformChanged =
+        currentTransform.x !== lastX ||
+        currentTransform.y !== lastY ||
+        currentTransform.k !== lastK;
+
+      const sizeChanged = canvas.width !== width || canvas.height !== height;
+
+      if (sizeChanged) {
+        canvas.width = width;
+        canvas.height = height;
       }
 
-      const canvasCtx = canvas.getContext('2d');
-      if (!canvasCtx) return;
+      if (needsRedraw || transformChanged || sizeChanged) {
+        const canvasCtx = canvas.getContext('2d');
+        if (canvasCtx) {
+          canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+          canvasCtx.save();
+          canvasCtx.scale(dpr, dpr);
+          canvasCtx.translate(currentTransform.x, currentTransform.y);
+          canvasCtx.scale(currentTransform.k, currentTransform.k);
 
-      canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-      canvasCtx.save();
-      canvasCtx.scale(dpr, dpr);
-      canvasCtx.translate(transform.x, transform.y);
-      canvasCtx.scale(transform.k, transform.k);
+          const allLinks = ctxValue.ctx.links;
+          const now = Date.now() / 1000;
 
-      const allLinks = ctxValue.ctx.links;
-      const now = Date.now() / 1000;
+          for (const [id, link] of allLinks.entries()) {
+            if (selection.links.has(id)) continue; // Skip drawing selected links on canvas as they are rendered via SVG
 
-      for (const [id, link] of allLinks.entries()) {
-        if (selection.links.has(id)) continue; // Skip drawing selected links on canvas as they are rendered via SVG
+            const pathString = getLinkPath(ctxValue.ctx, link);
+            if (!pathString) continue;
 
-        const pathString = getLinkPath(ctxValue.ctx, link);
-        if (!pathString) continue;
+            const isSelected = selection.links.has(id);
+            const { styling } = link;
 
-        const isSelected = selection.links.has(id);
-        const { styling } = link;
+            const strokeColor = isSelected
+              ? styling.selectionColor || '#3b82f6'
+              : styling.color || '#94a3b8';
+            const strokeWidth = isSelected ? (styling.width || 2) + 1 : styling.width || 2;
 
-        const strokeColor = isSelected
-          ? styling.selectionColor || '#3b82f6'
-          : styling.color || '#94a3b8';
-        const strokeWidth = isSelected ? (styling.width || 2) + 1 : styling.width || 2;
+            let strokeDasharray: number[] = [];
+            if (styling.style === LinkStyle.DASHED) strokeDasharray = [10, 5];
+            else if (styling.style === LinkStyle.DOTTED) strokeDasharray = [2, 4];
 
-        let strokeDasharray: number[] = [];
-        if (styling.style === LinkStyle.DASHED) strokeDasharray = [10, 5];
-        else if (styling.style === LinkStyle.DOTTED) strokeDasharray = [2, 4];
+            if (styling.flowing && strokeDasharray.length === 0) {
+              strokeDasharray = [10, 10];
+            }
 
-        if (styling.flowing && strokeDasharray.length === 0) {
-          strokeDasharray = [10, 10];
-        }
+            canvasCtx.strokeStyle = strokeColor;
+            canvasCtx.lineWidth = strokeWidth;
+            canvasCtx.lineCap = 'round';
+            canvasCtx.lineJoin = 'round';
 
-        canvasCtx.strokeStyle = strokeColor;
-        canvasCtx.lineWidth = strokeWidth;
-        canvasCtx.lineCap = 'round';
-        canvasCtx.lineJoin = 'round';
+            if (strokeDasharray.length > 0) {
+              canvasCtx.setLineDash(strokeDasharray);
+              if (styling.flowing) {
+                const speed = styling.flowSpeed || 1;
+                const cycleLength = strokeDasharray.reduce((a, b) => a + b, 0);
+                canvasCtx.lineDashOffset = -now * speed * cycleLength;
+              } else {
+                canvasCtx.lineDashOffset = 0;
+              }
+            } else {
+              canvasCtx.setLineDash([]);
+              canvasCtx.lineDashOffset = 0;
+            }
 
-        if (strokeDasharray.length > 0) {
-          canvasCtx.setLineDash(strokeDasharray);
-          if (styling.flowing) {
-            const speed = styling.flowSpeed || 1;
-            const cycleLength = strokeDasharray.reduce((a, b) => a + b, 0);
-            canvasCtx.lineDashOffset = -now * speed * cycleLength;
-          } else {
-            canvasCtx.lineDashOffset = 0;
+            if (typeof Path2D !== 'undefined') {
+              const p = new Path2D(pathString);
+              canvasCtx.beginPath();
+              canvasCtx.stroke(p);
+            }
           }
-        } else {
-          canvasCtx.setLineDash([]);
-          canvasCtx.lineDashOffset = 0;
+
+          canvasCtx.restore();
         }
 
-        if (typeof Path2D !== 'undefined') {
-          const p = new Path2D(pathString);
-          canvasCtx.beginPath();
-          canvasCtx.stroke(p);
-        }
+        needsRedraw = false;
+        lastX = currentTransform.x;
+        lastY = currentTransform.y;
+        lastK = currentTransform.k;
       }
 
-      canvasCtx.restore();
-
-      const hasFlowing = Array.from(allLinks.values()).some((l) => l.styling?.flowing);
-      const isDraggingAny = !!(ctxValue.ctx as any).activeDragNodeIds || !!pendingLink;
-
-      if (hasFlowing || isDraggingAny) {
-        animationId = requestAnimationFrame(render);
-      }
+      animationId = requestAnimationFrame(render);
     };
-
-    render();
 
     // Re-render canvas when entity moves or context changes bulk state
     const onMove = () => {
-      render();
+      needsRedraw = true;
     };
 
     const handles = [
@@ -269,25 +288,35 @@ export const World: React.FC<WorldProps> = ({
       ctxValue.ctx.registerSocketDropListener(onMove)
     ];
 
+    const resizeObserver = new ResizeObserver(() => {
+      render();
+    });
+
+    if (worldEl) {
+      resizeObserver.observe(worldEl);
+    }
+
+    render();
+
     return () => {
       cancelAnimationFrame(animationId);
       handles.forEach((h) => ctxValue.ctx.unregisterListener(h));
+      resizeObserver.disconnect();
     };
   }, [
     ctxValue.ctx,
-    transform,
+    viewportRef,
     selection,
     renderLinksViaCanvas,
     pendingLink,
     links.length,
-    containerSize.width,
-    containerSize.height
+    worldEl
   ]);
 
   return (
     <ShortcutProvider>
       <div
-        ref={worldRef}
+        ref={setWorldRef}
         className="__anode-world"
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}

@@ -4,11 +4,13 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
   type FC,
   type ReactNode,
   type Dispatch,
   type SetStateAction,
-  type RefObject
+  type RefObject,
+  type MutableRefObject
 } from 'react';
 import { Context } from '@stuly/anode';
 
@@ -21,8 +23,9 @@ interface Viewport {
 interface AnodeContextValue {
   ctx: Context;
   worldRef: RefObject<HTMLDivElement | null>;
+  viewportRef: MutableRefObject<Viewport>;
   viewport: Viewport;
-  setViewport: (v: Viewport) => void;
+  setViewport: (v: Viewport | ((prev: Viewport) => Viewport)) => void;
   screenToWorld: (clientX: number, clientY: number) => { x: number; y: number };
   setScreenToWorld: Dispatch<
     SetStateAction<(clientX: number, clientY: number) => { x: number; y: number }>
@@ -120,7 +123,17 @@ export const AnodeProvider: FC<AnodeProviderProps> = ({ children, context }) => 
   // Use lazy initializer to ensure Context is only created once
   const [ctx] = useState(() => context ?? new Context());
   const worldRef = useRef<HTMLDivElement | null>(null);
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, k: 1 });
+  const viewportRef = useRef<Viewport>({ x: 0, y: 0, k: 1 });
+  const [viewport, setViewportState] = useState<Viewport>({ x: 0, y: 0, k: 1 });
+
+  const setViewport = useCallback((v: Viewport | ((prev: Viewport) => Viewport)) => {
+    setViewportState((prev) => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      viewportRef.current = next;
+      return next;
+    });
+  }, []);
+
   const [screenToWorld, setScreenToWorld] = useState<
     (clientX: number, clientY: number) => { x: number; y: number }
   >(() => (x: number, y: number) => ({ x, y }));
@@ -133,6 +146,7 @@ export const AnodeProvider: FC<AnodeProviderProps> = ({ children, context }) => 
     () => ({
       ctx,
       worldRef,
+      viewportRef,
       viewport,
       setViewport,
       screenToWorld,
@@ -140,7 +154,7 @@ export const AnodeProvider: FC<AnodeProviderProps> = ({ children, context }) => 
       selection,
       setSelection
     }),
-    [ctx, worldRef, viewport, screenToWorld, selection]
+    [ctx, worldRef, viewportRef, viewport, setViewport, screenToWorld, selection]
   );
 
   return <AnodeReactContext.Provider value={value}>{children}</AnodeReactContext.Provider>;
