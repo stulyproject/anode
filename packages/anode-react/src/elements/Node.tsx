@@ -1,6 +1,7 @@
 import {
   useEffect,
   useState,
+  useRef,
   type FC,
   type ReactNode,
   type MouseEvent,
@@ -29,6 +30,7 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
   const entity = ctx.entities.get(id);
   const [, setTick] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const nodeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!entity) return;
@@ -36,6 +38,10 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
     // Force re-render when this specific entity moves in the core engine
     const onMove = (movingEntity: Entity) => {
       if (movingEntity.id === id) {
+        const activeDrags = (ctx as any).activeDragNodeIds;
+        if (activeDrags && activeDrags.has(id)) {
+          return;
+        }
         setTick((t) => t + 1);
       }
     };
@@ -46,6 +52,19 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
     };
   }, [ctx, id, entity]);
 
+  useEffect(() => {
+    if (!nodeRef.current) return;
+    if (!(ctx as any).nodeDOMs) {
+      (ctx as any).nodeDOMs = new Map<number, HTMLDivElement>();
+    }
+    (ctx as any).nodeDOMs.set(id, nodeRef.current);
+    return () => {
+      if ((ctx as any).nodeDOMs) {
+        (ctx as any).nodeDOMs.delete(id);
+      }
+    };
+  }, [ctx, id]);
+
   if (!entity) return null;
 
   const worldPos = ctx.getWorldPosition(id);
@@ -53,6 +72,7 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
 
   return (
     <div
+      ref={nodeRef}
       className="anode-node"
       style={{
         position: 'absolute',
@@ -97,6 +117,9 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
           startPositions.set(node.id, { x: node.position.x, y: node.position.y });
         }
 
+        // Set active drag set in context to prevent react re-renders
+        (ctx as any).activeDragNodeIds = new Set(nodesToMove.map((n) => n.id));
+
         let hasDragged = false;
 
         const onMouseMove = (moveEvent: globalThis.MouseEvent) => {
@@ -118,6 +141,13 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
               newX = Math.round(newX / gridSize) * gridSize;
               newY = Math.round(newY / gridSize) * gridSize;
 
+              // Directly update DOM element
+              const el = (ctx as any).nodeDOMs?.get(node.id);
+              if (el) {
+                el.style.left = `${newX}px`;
+                el.style.top = `${newY}px`;
+              }
+
               node.move(newX, newY);
             }
           }
@@ -127,6 +157,9 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
           setIsDragging(false);
           document.removeEventListener('mousemove', onMouseMove);
           document.removeEventListener('mouseup', onMouseUp);
+
+          // Clear active drag set
+          delete (ctx as any).activeDragNodeIds;
 
           if (!hasDragged && !e.shiftKey) {
             setSelection({ nodes: new Set([id]), links: new Set() });
@@ -161,6 +194,9 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
               ctx.record(doActions, undoActions, 'Move Nodes');
               ctx.notifyBulkChange();
             }
+          } else {
+            // Force aligned re-render if we didn't drag but selected
+            ctx.notifyBulkChange();
           }
         };
 
@@ -192,6 +228,9 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
           startPositions.set(node.id, { x: node.position.x, y: node.position.y });
         }
 
+        // Set active drag set in context to prevent react re-renders
+        (ctx as any).activeDragNodeIds = new Set(nodesToMove.map((n) => n.id));
+
         let hasDragged = false;
 
         const onTouchMove = (moveEvent: globalThis.TouchEvent) => {
@@ -214,6 +253,13 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
               newX = Math.round(newX / gridSize) * gridSize;
               newY = Math.round(newY / gridSize) * gridSize;
 
+              // Directly update DOM element
+              const el = (ctx as any).nodeDOMs?.get(node.id);
+              if (el) {
+                el.style.left = `${newX}px`;
+                el.style.top = `${newY}px`;
+              }
+
               node.move(newX, newY);
             }
           }
@@ -224,6 +270,9 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
           setIsDragging(false);
           document.removeEventListener('touchmove', onTouchMove);
           document.removeEventListener('touchend', onTouchEnd);
+
+          // Clear active drag set
+          delete (ctx as any).activeDragNodeIds;
 
           if (hasDragged) {
             const doActions: any[] = [];
@@ -254,6 +303,8 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
               ctx.record(doActions, undoActions, 'Move Nodes');
               ctx.notifyBulkChange();
             }
+          } else {
+            ctx.notifyBulkChange();
           }
         };
 
