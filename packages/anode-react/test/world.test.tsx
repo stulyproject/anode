@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { AnodeProvider, useAnode } from '../src/context.js';
 import { World } from '../src/elements/World.js';
 import type { NodeData } from '../src/elements/World/SyncManager.js';
@@ -82,7 +82,12 @@ describe('World Component', () => {
 
     const container = render(
       <AnodeProvider>
-        <World nodes={nodes} links={links} nodeTypes={{ default: CustomNode }} />
+        <World
+          nodes={nodes}
+          links={links}
+          nodeTypes={{ default: CustomNode }}
+          renderLinksViaCanvas={false}
+        />
         <Helper />
       </AnodeProvider>
     );
@@ -110,5 +115,107 @@ describe('World Component', () => {
       ?.getAttribute('d');
     expect(updatedPath).not.toBe(initialPath);
     expect(updatedPath).toContain('M 50 50');
+  });
+
+  it('should render links via HTML5 Canvas when renderLinksViaCanvas is enabled', () => {
+    const nodes: NodeData[] = [
+      { id: 1, position: { x: 0, y: 0 }, data: { label: 'Node 1' } },
+      { id: 2, position: { x: 200, y: 0 }, data: { label: 'Node 2' } }
+    ];
+
+    const links = [{ id: 1, source: 1, sourceHandle: 'out', target: 2, targetHandle: 'in' }];
+
+    const CustomNode = ({ entity }: any) => {
+      return (
+        <div>
+          <span>{entity.inner.label}</span>
+          <Socket entityId={entity.id} kind={SocketKind.OUTPUT} name="out" />
+          <Socket entityId={entity.id} kind={SocketKind.INPUT} name="in" />
+        </div>
+      );
+    };
+
+    const container = render(
+      <AnodeProvider>
+        <World
+          nodes={nodes}
+          links={links}
+          nodeTypes={{ default: CustomNode }}
+          renderLinksViaCanvas={true}
+        />
+      </AnodeProvider>
+    );
+
+    // Verify canvas is rendered
+    const canvasEl = container.container.querySelector('canvas');
+    expect(canvasEl).toBeInTheDocument();
+
+    // Verify no SVG paths are rendered for the unselected link
+    const pathEl = container.container.querySelector('path:not([stroke="transparent"])');
+    expect(pathEl).toBeNull();
+  });
+
+  it('should select canvas link on click and add waypoint on double click', async () => {
+    const nodes: NodeData[] = [
+      { id: 1, position: { x: 0, y: 0 }, data: { label: 'Node 1' } },
+      { id: 2, position: { x: 200, y: 0 }, data: { label: 'Node 2' } }
+    ];
+
+    const links = [{ id: 1, source: 1, sourceHandle: 'out', target: 2, targetHandle: 'in' }];
+
+    const CustomNode = ({ entity }: any) => {
+      return (
+        <div>
+          <span>{entity.inner.label}</span>
+          <Socket entityId={entity.id} kind={SocketKind.OUTPUT} name="out" />
+          <Socket entityId={entity.id} kind={SocketKind.INPUT} name="in" />
+        </div>
+      );
+    };
+
+    let engineContext: any = null;
+    const Helper = () => {
+      const ctx = useAnode();
+      engineContext = ctx;
+      return null;
+    };
+
+    const container = render(
+      <AnodeProvider>
+        <World
+          nodes={nodes}
+          links={links}
+          nodeTypes={{ default: CustomNode }}
+          renderLinksViaCanvas={true}
+        />
+        <Helper />
+      </AnodeProvider>
+    );
+
+    const pathEl = container.container.querySelector('path[stroke="transparent"]')!;
+    expect(pathEl).toBeInTheDocument();
+
+    // Initially, link is not selected
+    expect(engineContext.links.get(1)).toBeDefined();
+
+    // Trigger click on the transparent path overlay
+    act(() => {
+      fireEvent.click(pathEl, { clientX: 100, clientY: 0 });
+    });
+
+    // Wait, the selection state should update. Let's verify by checking if the link is now rendered as a visible path
+    const visiblePathEl = container.container.querySelector('path:not([stroke="transparent"])');
+    expect(visiblePathEl).toBeInTheDocument();
+
+    // Now let's double click the transparent path to add a waypoint
+    const pathElAfterSelection = container.container.querySelector('path[stroke="transparent"]')!;
+    act(() => {
+      fireEvent.doubleClick(pathElAfterSelection, { clientX: 100, clientY: 50 });
+    });
+
+    // Verify a waypoint is added
+    const link = engineContext.links.get(1);
+    expect(link.waypoints.length).toBe(1);
+    expect(link.waypoints[0].y).toBe(50);
   });
 });

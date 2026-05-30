@@ -149,7 +149,12 @@ export const Link: React.FC<LinkProps> = ({ id, component: Component }) => {
           }
         `}
       </style>
-      <g onClick={onClick} onDoubleClick={onDoubleClick} style={{ cursor: 'pointer' }}>
+      <g
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{ cursor: 'pointer' }}
+      >
         {/* Invisible thicker path for easier clicking */}
         <path d={d} fill="none" stroke="transparent" strokeWidth={15} />
         <path

@@ -279,7 +279,19 @@ export const useInteractionHandler = ({
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    if (e.target !== worldRef.current) return;
+    if (!worldRef.current) return;
+    const targetEl = e.target as HTMLElement;
+    if (
+      targetEl &&
+      (targetEl.closest('.anode-node') ||
+        targetEl.closest('.anode-group') ||
+        targetEl.closest('.anode-socket') ||
+        targetEl.closest('.anode-controls') ||
+        targetEl.closest('.anode-minimap') ||
+        targetEl.closest('.anode-panel'))
+    ) {
+      return;
+    }
 
     if (e.altKey) {
       const rect = worldRef.current.getBoundingClientRect();
@@ -354,7 +366,18 @@ export const useInteractionHandler = ({
 
   const onTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
-      if (e.target !== worldRef.current) return;
+      const targetEl = e.target as HTMLElement;
+      if (
+        targetEl &&
+        (targetEl.closest('.anode-node') ||
+          targetEl.closest('.anode-group') ||
+          targetEl.closest('.anode-socket') ||
+          targetEl.closest('.anode-controls') ||
+          targetEl.closest('.anode-minimap') ||
+          targetEl.closest('.anode-panel'))
+      ) {
+        return;
+      }
       setSelection({ nodes: new Set(), links: new Set() });
       const touch = e.touches[0];
       if (!touch) return;
