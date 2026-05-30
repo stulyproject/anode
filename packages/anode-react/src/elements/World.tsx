@@ -262,14 +262,27 @@ export const World: React.FC<WorldProps> = ({
       ctxValue.ctx.registerEntityMoveListener(onMove),
       ctxValue.ctx.registerBulkChangeListener(onMove),
       ctxValue.ctx.registerLinkUpdateListener(onMove),
-      ctxValue.ctx.registerSocketMoveListener(onMove)
+      ctxValue.ctx.registerSocketMoveListener(onMove),
+      ctxValue.ctx.registerLinkCreateListener(onMove),
+      ctxValue.ctx.registerLinkDropListener(onMove),
+      ctxValue.ctx.registerSocketCreateListener(onMove),
+      ctxValue.ctx.registerSocketDropListener(onMove)
     ];
 
     return () => {
       cancelAnimationFrame(animationId);
       handles.forEach((h) => ctxValue.ctx.unregisterListener(h));
     };
-  }, [ctxValue.ctx, transform, selection, renderLinksViaCanvas, pendingLink, links.length]);
+  }, [
+    ctxValue.ctx,
+    transform,
+    selection,
+    renderLinksViaCanvas,
+    pendingLink,
+    links.length,
+    containerSize.width,
+    containerSize.height
+  ]);
 
   return (
     <ShortcutProvider>
