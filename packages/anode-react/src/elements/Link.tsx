@@ -37,16 +37,7 @@ export const Link: React.FC<LinkProps> = ({ id, component: Component }) => {
     const onUpdate = () => setTick((t) => t + 1);
 
     // Subscribe to everything that affects the path or style
-    const h1 = ctx.registerEntityMoveListener((entity) => {
-      const fromSocket = ctx.sockets.get(link.from);
-      const toSocket = ctx.sockets.get(link.to);
-      if (
-        (fromSocket && fromSocket.entityId === entity.id) ||
-        (toSocket && toSocket.entityId === entity.id)
-      ) {
-        onUpdate();
-      }
-    });
+    const h1 = ctx.registerEntityMoveListener(onUpdate);
     const h2 = ctx.registerSocketMoveListener(onUpdate);
     const h3 = ctx.registerSocketCreateListener(onUpdate);
     const h4 = ctx.registerLinkUpdateListener((l) => {

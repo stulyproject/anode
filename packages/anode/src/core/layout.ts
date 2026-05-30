@@ -46,6 +46,56 @@ export function getLinkCenter(ctx: Context, link: Link): Vec2 | null {
 }
 
 /**
+ * Helper to draw a clean orthogonal line path with optional rounded corners.
+ */
+function generateOrthogonalPath(vertices: Vec2[], isSmooth: boolean, borderRadius: number): string {
+  if (vertices.length === 0) return '';
+  let path = `M ${vertices[0]!.x} ${vertices[0]!.y}`;
+  if (vertices.length === 1) return path;
+
+  if (!isSmooth) {
+    for (let i = 1; i < vertices.length; i++) {
+      path += ` L ${vertices[i]!.x} ${vertices[i]!.y}`;
+    }
+    return path;
+  }
+
+  // Smooth path rendering with rounded corners
+  for (let i = 1; i < vertices.length; i++) {
+    const curr = vertices[i]!;
+    if (i === vertices.length - 1) {
+      path += ` L ${curr.x} ${curr.y}`;
+    } else {
+      const prev = vertices[i - 1]!;
+      const next = vertices[i + 1]!;
+
+      const isPrevHorizontal = Math.abs(prev.y - curr.y) < 0.01;
+
+      const len1 = isPrevHorizontal ? Math.abs(prev.x - curr.x) : Math.abs(prev.y - curr.y);
+      const len2 = isPrevHorizontal ? Math.abs(next.y - curr.y) : Math.abs(next.x - curr.x);
+      const r = Math.min(borderRadius, len1 / 2, len2 / 2);
+
+      if (r < 1) {
+        path += ` L ${curr.x} ${curr.y}`;
+      } else {
+        if (isPrevHorizontal) {
+          const signX = curr.x > prev.x ? 1 : -1;
+          const signY = next.y > curr.y ? 1 : -1;
+          path += ` L ${curr.x - r * signX} ${curr.y}`;
+          path += ` Q ${curr.x} ${curr.y} ${curr.x} ${curr.y + r * signY}`;
+        } else {
+          const signY = curr.y > prev.y ? 1 : -1;
+          const signX = next.x > curr.x ? 1 : -1;
+          path += ` L ${curr.x} ${curr.y - r * signY}`;
+          path += ` Q ${curr.x} ${curr.y} ${curr.x + r * signX} ${curr.y}`;
+        }
+      }
+    }
+  }
+  return path;
+}
+
+/**
  * Generates an SVG path string for a link based on its `kind` and `waypoints`.
  */
 export function getLinkPath(ctx: Context, link: Link): string | null {
@@ -85,46 +135,54 @@ export function getLinkPath(ctx: Context, link: Link): string | null {
     const minOffset = 20; // Ensure link comes out straight from socket
 
     const pts = [fromPos, ...link.waypoints, toPos];
-    let path = `M ${pts[0]!.x} ${pts[0]!.y}`;
+    const allVertices: Vec2[] = [];
 
     for (let i = 0; i < pts.length - 1; i++) {
       const p1 = pts[i]!;
       const p2 = pts[i + 1]!;
 
-      // Calculate shoulder point for first segment
+      // Calculate shoulder point for first segment of this sub-segment
       const startX = i === 0 ? p1.x + minOffset : p1.x;
-      // Calculate shoulder point for last segment
+      // Calculate shoulder point for last segment of this sub-segment
       const endX = i === pts.length - 2 ? p2.x - minOffset : p2.x;
 
-      if (i === 0) path += ` L ${startX} ${p1.y}`;
-
-      const midX = (startX + endX) / 2;
-
-      if (!isSmooth) {
-        path += ` L ${midX} ${p1.y} L ${midX} ${p2.y} L ${endX} ${p2.y}`;
-      } else {
-        const signX = endX > startX ? 1 : -1;
-        const signY = p2.y > p1.y ? 1 : -1;
-        const actualBorder = Math.min(
-          borderRadius,
-          Math.abs(startX - endX) / 2,
-          Math.abs(p1.y - p2.y) / 2
-        );
-
-        if (actualBorder < 1) {
-          path += ` L ${endX} ${p2.y}`;
-        } else {
-          path += ` L ${midX - actualBorder * signX} ${p1.y} 
-                    Q ${midX} ${p1.y} ${midX} ${p1.y + actualBorder * signY}
-                    L ${midX} ${p2.y - actualBorder * signY}
-                    Q ${midX} ${p2.y} ${midX + actualBorder * signX} ${p2.y}
-                    L ${endX} ${p2.y}`;
-        }
+      if (i === 0) {
+        allVertices.push(p1);
       }
 
-      if (i === pts.length - 2) path += ` L ${p2.x} ${p2.y}`;
+      allVertices.push(new Vec2(startX, p1.y));
+
+      if (endX >= startX) {
+        const midX = (startX + endX) / 2;
+        allVertices.push(new Vec2(midX, p1.y));
+        allVertices.push(new Vec2(midX, p2.y));
+      } else {
+        let midY = (p1.y + p2.y) / 2;
+        if (Math.abs(p1.y - p2.y) < 12) {
+          midY = p1.y + 50;
+        }
+        allVertices.push(new Vec2(startX, midY));
+        allVertices.push(new Vec2(endX, midY));
+      }
+
+      allVertices.push(new Vec2(endX, p2.y));
+      allVertices.push(p2);
     }
-    return path;
+
+    // Filter consecutive duplicate coordinates
+    const filteredVertices: Vec2[] = [];
+    for (const v of allVertices) {
+      if (filteredVertices.length === 0) {
+        filteredVertices.push(v);
+      } else {
+        const last = filteredVertices[filteredVertices.length - 1]!;
+        if (Math.abs(last.x - v.x) > 0.01 || Math.abs(last.y - v.y) > 0.01) {
+          filteredVertices.push(v);
+        }
+      }
+    }
+
+    return generateOrthogonalPath(filteredVertices, isSmooth, borderRadius);
   }
 
   return null;

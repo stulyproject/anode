@@ -141,5 +141,21 @@ describe('Core Enhancements', () => {
       expect(path).toContain('L 20 0');
       expect(path).toContain('L 200 200');
     });
+
+    it('should generate a 5-segment path without overlap when target is to the left of source', () => {
+      const e1 = ctx.newEntity({});
+      const e2 = ctx.newEntity({});
+      e1.move(200, 0);
+      e2.move(0, 100);
+
+      const s1 = ctx.newSocket(e1, SocketKind.OUTPUT, 'out');
+      const s2 = ctx.newSocket(e2, SocketKind.INPUT, 'in');
+
+      const link = ctx.newLink({ from: s1, to: s2, kind: LinkKind.STEP })!;
+
+      const path = getLinkPath(ctx, link);
+
+      expect(path).toBe('M 200 0 L 220 0 L 220 50 L -20 50 L -20 100 L 0 100');
+    });
   });
 });

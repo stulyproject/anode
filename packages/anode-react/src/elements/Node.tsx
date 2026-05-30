@@ -62,7 +62,7 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
         cursor: isDragging ? 'grabbing' : 'grab',
         outline: isSelected ? '2px solid #3b82f6' : 'none',
         borderRadius: 4,
-        transition: isDragging ? 'none' : 'left 0.15s ease-out, top 0.15s ease-out',
+        transition: 'none',
         zIndex: isDragging ? 1000 : 1
       }}
       onMouseDown={(e: MouseEvent) => {
@@ -71,14 +71,12 @@ export const Node: FC<NodeProps> = ({ id, children }) => {
 
         let currentSelection = selection;
         if (e.shiftKey) {
-          setSelection((prev) => {
-            const next = new Set(prev.nodes);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            const updated = { ...prev, nodes: next };
-            currentSelection = updated;
-            return updated;
-          });
+          const next = new Set(selection.nodes);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          const updated = { ...selection, nodes: next };
+          setSelection(updated);
+          currentSelection = updated;
         } else {
           if (!selection.nodes.has(id)) {
             const updated = { nodes: new Set([id]), links: new Set<number>() };
